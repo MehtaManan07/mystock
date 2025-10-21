@@ -10,6 +10,7 @@ from app.core.db.engine import get_db_util
 from app.core.config import config
 from app.core.response_interceptor import SuccessResponseInterceptor, CustomAPIRoute, skip_interceptor
 from app.modules.users import router as users_router
+from app.modules.products import router as products_router
 
 # Configure logging to output to console
 logging.basicConfig(
@@ -48,6 +49,7 @@ app.add_middleware(SuccessResponseInterceptor)
 
 # Include routers
 app.include_router(users_router)
+app.include_router(products_router)
 
 
 @app.get("/demo")
