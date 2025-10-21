@@ -8,6 +8,7 @@ from sqlalchemy import text
 from app.core.error_handler import global_exception_handler
 from app.core.db.engine import get_db_util
 from app.core.config import config
+from app.modules.users import router as users_router
 
 # Configure logging to output to console
 logging.basicConfig(
@@ -37,6 +38,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include routers
+app.include_router(users_router)
 
 
 @app.get("/demo")

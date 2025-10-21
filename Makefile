@@ -1,5 +1,8 @@
 # Makefile for FastAPI + Alembic project
 
+# Use zsh so personal aliases work
+SHELL := /bin/zsh
+
 help:
 	@echo "Usage:"
 	@echo "  make run             - Run the FastAPI server"
@@ -75,3 +78,10 @@ endif
 
 expose:
 	ssh -p 443 -R0:localhost:8000 qr@free.pinggy.io
+
+commit:
+ifndef msg
+	$(error You must provide a message using msg="your message")
+endif
+	@zsh -i -c 'pgit add .'
+	@zsh -i -c 'pgit commit -m "$(msg)"'
