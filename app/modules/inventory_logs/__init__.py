@@ -1,0 +1,2 @@
+"""Inventory Logs module"""
+
