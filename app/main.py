@@ -12,6 +12,7 @@ from app.core.response_interceptor import SuccessResponseInterceptor, CustomAPIR
 from app.modules.users import router as users_router
 from app.modules.products import router as products_router
 from app.modules.containers import router as containers_router
+from app.modules.container_products import router as container_products_router
 
 # Configure logging to output to console
 logging.basicConfig(
@@ -52,6 +53,7 @@ app.add_middleware(SuccessResponseInterceptor)
 app.include_router(users_router)
 app.include_router(products_router)
 app.include_router(containers_router)
+app.include_router(container_products_router)
 
 
 @app.get("/demo")
