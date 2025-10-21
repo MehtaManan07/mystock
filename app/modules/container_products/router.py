@@ -53,21 +53,7 @@ async def get_products_in_container(
     items = await ContainerProductService.get_products_in_container(
         db, container_id
     )
-    
-    # Map to response format
-    return [
-        ContainerProductResponse(
-            id=item.id,
-            container_id=item.container_id,
-            product_id=item.product_id,
-            quantity=item.quantity,
-            deleted_at=item.deleted_at,
-            created_at=item.created_at,
-            updated_at=item.updated_at,
-            product=item.product,
-        )
-        for item in items
-    ]
+    return items
 
 
 @router.get(
@@ -81,21 +67,7 @@ async def get_containers_for_product(
     Returns container-product relationships with container details.
     """
     items = await ContainerProductService.get_containers_for_product(db, product_id)
-    
-    # Map to response format
-    return [
-        ContainerProductResponse(
-            id=item.id,
-            container_id=item.container_id,
-            product_id=item.product_id,
-            quantity=item.quantity,
-            deleted_at=item.deleted_at,
-            created_at=item.created_at,
-            updated_at=item.updated_at,
-            container=item.container,
-        )
-        for item in items
-    ]
+    return items
 
 
 @router.get("/search", response_model=List[ContainerProductResponse])
@@ -108,22 +80,7 @@ async def search_containers_by_sku(
     Case-insensitive partial match on product name.
     """
     items = await ContainerProductService.search_containers_by_sku(db, sku)
-    
-    # Map to response format
-    return [
-        ContainerProductResponse(
-            id=item.id,
-            container_id=item.container_id,
-            product_id=item.product_id,
-            quantity=item.quantity,
-            deleted_at=item.deleted_at,
-            created_at=item.created_at,
-            updated_at=item.updated_at,
-            product=item.product,
-            container=item.container,
-        )
-        for item in items
-    ]
+    return items
 
 
 @router.get(

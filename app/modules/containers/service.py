@@ -9,11 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import NotFoundError
-from .models import Container, ContainerType
+from .models import ContainerType, Container
 from .schemas import CreateContainerDto, CreateContainerBulkDto, UpdateContainerDto
 from app.modules.container_products.models import ContainerProduct
 from app.modules.inventory_logs.models import InventoryLog
-from app.modules.products.models import Product
 
 
 class ContainerService:
@@ -74,16 +73,14 @@ class ContainerService:
         return [id_to_container[cid] for cid in container_ids]
 
     @staticmethod
-    async def find_all(
-        db: AsyncSession, search: Optional[str] = None
-    ) -> List[dict]:
+    async def find_all(db: AsyncSession, search: Optional[str] = None) -> List[dict]:
         """
         Find all containers with optional search filter.
         Includes product count from container_products.
         Optimized: Uses selectinload to prevent N+1 queries.
-        
+
         Sorting: Extracts numeric values from container names and sorts DESC.
-        Equivalent to PostgreSQL: 
+        Equivalent to PostgreSQL:
         COALESCE(CAST(NULLIF(regexp_replace(container.name, '\\D', '', 'g'), '') AS INTEGER), 0) DESC
 
         Args:
@@ -110,13 +107,10 @@ class ContainerService:
         # COALESCE ensures we get 0 for names with no numbers
         numeric_part = func.coalesce(
             cast(
-                func.nullif(
-                    func.regexp_replace(Container.name, r'\D', '', 'g'),
-                    ''
-                ),
-                Integer
+                func.nullif(func.regexp_replace(Container.name, r"\D", "", "g"), ""),
+                Integer,
             ),
-            0
+            0,
         )
         query = query.order_by(numeric_part.desc())
 
@@ -174,9 +168,7 @@ class ContainerService:
         active_contents = [
             cp
             for cp in container.contents
-            if cp.deleted_at is None
-            and cp.product
-            and cp.product.deleted_at is None
+            if cp.deleted_at is None and cp.product and cp.product.deleted_at is None
         ]
 
         # Filter out soft-deleted logs and products
@@ -278,9 +270,7 @@ class ContainerService:
         """
         from datetime import datetime
 
-        result = await db.execute(
-            select(Container).where(Container.id == container_id)
-        )
+        result = await db.execute(select(Container).where(Container.id == container_id))
         container = result.scalar_one_or_none()
 
         if not container:
@@ -288,4 +278,3 @@ class ContainerService:
 
         container.deleted_at = datetime.utcnow()
         await db.flush()
-

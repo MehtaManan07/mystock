@@ -3,7 +3,7 @@ from sqlalchemy import String, Enum as SQLEnum, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import TYPE_CHECKING
 
-from app.core.db.base import BaseModel
+from app.core.db import BaseModel
 
 if TYPE_CHECKING:
     from app.modules.container_products.models import ContainerProduct

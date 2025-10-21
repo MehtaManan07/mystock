@@ -3,7 +3,7 @@ from sqlalchemy import Integer, String, Text, ForeignKey, DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import TYPE_CHECKING, Optional
 
-from app.core.db.base import BaseModel
+from app.core.db import BaseModel
 
 if TYPE_CHECKING:
     from app.modules.products.models import Product

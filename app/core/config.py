@@ -23,9 +23,9 @@ class Config(BaseSettings):
     jwt_secret: str = Field(default="", alias="JWT_SECRET")
 
     # AWS Configuration
-    aws_region: str = Field(default="", alias="AWS_REGION")
-    aws_access_key_id: str = Field(default="", alias="AWS_ACCESS_KEY_ID")
-    aws_secret_access_key: str = Field(default="", alias="AWS_SECRET_ACCESS_KEY")
+    aws_region: str = Field(default="", alias="MY_AWS_REGION")
+    aws_access_key_id: str = Field(default="", alias="MY_AWS_ACCESS_KEY_ID")
+    aws_secret_access_key: str = Field(default="", alias="MY_AWS_SECRET_ACCESS_KEY")
 
     is_production: bool = (
         os.getenv("ENVIRONMENT", "development").lower() == "production"

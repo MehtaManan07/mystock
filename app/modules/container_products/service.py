@@ -63,9 +63,7 @@ class ContainerProductService:
         existing = result.scalars().all()
 
         # Create map for quick lookup
-        return {
-            f"{entry.container_id}-{entry.product_id}": entry for entry in existing
-        }
+        return {f"{entry.container_id}-{entry.product_id}": entry for entry in existing}
 
     @staticmethod
     async def set_products_in_container(
@@ -361,4 +359,3 @@ class ContainerProductService:
             )
             for item in input_data
         ]
-

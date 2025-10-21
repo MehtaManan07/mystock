@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
-from .models import User, Role
+from .models import Role, User
 from .schemas import UpdateUserDto
 
 
