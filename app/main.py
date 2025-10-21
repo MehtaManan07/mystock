@@ -40,6 +40,7 @@ app.add_exception_handler(Exception, global_exception_handler)
 origins = [
     "http://localhost",
     "http://localhost:5173",
+    "http://mayuragency.surge.sh",
 ]
 
 app.add_middleware(
