@@ -8,6 +8,7 @@ from sqlalchemy import text
 from app.core.error_handler import global_exception_handler
 from app.core.db.engine import get_db_util
 from app.core.config import config
+from app.core.response_interceptor import SuccessResponseInterceptor, CustomAPIRoute, skip_interceptor
 from app.modules.users import router as users_router
 
 # Configure logging to output to console
@@ -28,6 +29,9 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# Override the default route class to support skip_interceptor decorator
+app.router.route_class = CustomAPIRoute
+
 # Add global exception handler
 app.add_exception_handler(Exception, global_exception_handler)
 
@@ -38,6 +42,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add Success Response Interceptor (must be added after CORS)
+app.add_middleware(SuccessResponseInterceptor)
 
 # Include routers
 app.include_router(users_router)
@@ -63,9 +70,11 @@ async def debug_config() -> dict:
 
 
 @app.get("/health/db")
+@skip_interceptor
 async def health_check_db(db: AsyncSession = Depends(get_db_util)) -> dict:
     """
-    Health check endpoint that tests database connectivity with a simple SQL query
+    Health check endpoint that tests database connectivity with a simple SQL query.
+    This endpoint skips the response interceptor to maintain the original format.
     """
     try:
         # Simple SQL query to check database connection and get version

@@ -4,10 +4,11 @@ Demonstrates how to use UsersService with dependency injection.
 """
 
 from typing import List
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.engine import get_db_util
+from app.core.response_interceptor import skip_interceptor
 from .service import UsersService
 from .schemas import UserResponse, UpdateUserDto
 from .models import Role
@@ -24,9 +25,10 @@ async def get_all_users(db: AsyncSession = Depends(get_db_util)):
 
 @router.get("/role", response_model=List[UserResponse])
 async def get_users_by_role(
-    roles: List[Role], db: AsyncSession = Depends(get_db_util)
+    roles: List[Role] = Query(..., description="List of roles to filter by"),
+    db: AsyncSession = Depends(get_db_util)
 ):
-    """Get users by role(s)"""
+    """Get users by role(s). Pass multiple roles as query params: ?roles=ADMIN&roles=STAFF"""
     users = await UsersService.find_by_role(db, roles)
     return users
 
@@ -58,17 +60,19 @@ async def get_user_assigned_tasks(
 
 
 @router.patch("/{user_id}")
+@skip_interceptor
 async def update_user(
     user_id: int, update_dto: UpdateUserDto, db: AsyncSession = Depends(get_db_util)
 ):
-    """Update user information"""
+    """Update user information (returns custom response format)"""
     await UsersService.update(db, user_id, update_dto)
     return {"message": "User updated successfully"}
 
 
 @router.delete("/{user_id}")
+@skip_interceptor
 async def delete_user(user_id: int, db: AsyncSession = Depends(get_db_util)):
-    """Soft delete user"""
+    """Soft delete user (returns custom response format)"""
     await UsersService.remove(db, user_id)
     return {"message": "User deleted successfully"}
 
