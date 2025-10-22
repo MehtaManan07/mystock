@@ -12,6 +12,7 @@ from app.modules.products import router as products_router
 from app.modules.containers import router as containers_router
 from app.modules.container_products import router as container_products_router
 from app.modules.contacts import router as contacts_router
+from app.modules.inventory_logs import router as inventory_logs_router
 
 # Configure logging to output to console
 logging.basicConfig(
@@ -61,6 +62,7 @@ app.include_router(products_router)
 app.include_router(containers_router)
 app.include_router(container_products_router)
 app.include_router(contacts_router)
+app.include_router(inventory_logs_router)
 
 
 @app.get("/demo")

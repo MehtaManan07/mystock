@@ -43,6 +43,7 @@ async def get_all_contacts(
     - GET /contacts?types=customer - Get all customers
     - GET /contacts?balance=positive - Get all receivables
     - GET /contacts?types=supplier&balance=negative - Get suppliers you owe
+    - GET /contacts?search=John - Search by name or phone
     """
     contacts = await ContactsService.find_all(db=db, filters=filters)
     return contacts
