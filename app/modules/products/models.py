@@ -1,6 +1,7 @@
-from sqlalchemy import String, Index
+from decimal import Decimal
+from sqlalchemy import String, Index, Numeric
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from app.core.db import BaseModel
 
@@ -27,6 +28,19 @@ class Product(BaseModel):
     size: Mapped[str] = mapped_column(String(255), nullable=False)
 
     packing: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    # Default pricing fields (optional, can be overridden per transaction)
+    default_sale_price: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(precision=15, scale=2),
+        nullable=True,
+        default=None,
+    )
+
+    default_purchase_price: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(precision=15, scale=2),
+        nullable=True,
+        default=None,
+    )
 
     # Relationships
     containers: Mapped[list["ContainerProduct"]] = relationship(
