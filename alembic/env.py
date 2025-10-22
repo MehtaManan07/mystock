@@ -121,6 +121,7 @@ from app.modules.products.models import Product
 from app.modules.containers.models import Container
 from app.modules.container_products.models import ContainerProduct
 from app.modules.inventory_logs.models import InventoryLog
+from app.modules.contacts.models import Contact
 
 # Load environment variables from .env file
 load_dotenv()
