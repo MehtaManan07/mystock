@@ -4,10 +4,11 @@ Optimized queries with no extra SQL calls.
 """
 
 from typing import List, Optional
+from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import NotFoundError, ValidationError
 from .models import Contact, ContactType
 from .schemas import CreateContactDto, UpdateContactDto, FilterContactsDto
 
@@ -162,3 +163,82 @@ class ContactsService:
 
         contact.deleted_at = datetime.utcnow()
         await db.flush()
+
+    @staticmethod
+    async def validate_for_sale(db: AsyncSession, contact_id: int) -> Contact:
+        """
+        Validate that a contact exists and can be used for sales.
+        
+        Args:
+            db: Database session
+            contact_id: Contact ID to validate
+            
+        Returns:
+            Contact entity if valid
+            
+        Raises:
+            NotFoundError: If contact not found
+            ValidationError: If contact is not a customer or both
+        """
+        contact_query = select(Contact).where(
+            Contact.id == contact_id,
+            Contact.deleted_at.is_(None)
+        )
+        result = await db.execute(contact_query)
+        contact = result.scalar_one_or_none()
+
+        if not contact:
+            raise NotFoundError("Contact", contact_id)
+
+        if contact.type not in [ContactType.customer, ContactType.both]:
+            raise ValidationError(
+                f"Contact '{contact.name}' is not a customer. "
+                f"Only customers or mixed contacts can be used for sales."
+            )
+
+        return contact
+
+    @staticmethod
+    async def validate_for_purchase(db: AsyncSession, contact_id: int) -> Contact:
+        """
+        Validate that a contact exists and can be used for purchases.
+        
+        Args:
+            db: Database session
+            contact_id: Contact ID to validate
+            
+        Returns:
+            Contact entity if valid
+            
+        Raises:
+            NotFoundError: If contact not found
+            ValidationError: If contact is not a supplier or both
+        """
+        contact_query = select(Contact).where(
+            Contact.id == contact_id,
+            Contact.deleted_at.is_(None)
+        )
+        result = await db.execute(contact_query)
+        contact = result.scalar_one_or_none()
+
+        if not contact:
+            raise NotFoundError("Contact", contact_id)
+
+        if contact.type not in [ContactType.supplier, ContactType.both]:
+            raise ValidationError(
+                f"Contact '{contact.name}' is not a supplier. "
+                f"Only suppliers or mixed contacts can be used for purchases."
+            )
+
+        return contact
+
+    @staticmethod
+    def update_balance(contact: Contact, amount: Decimal) -> None:
+        """
+        Update contact balance (in-memory, no DB call).
+        
+        Args:
+            contact: Pre-fetched contact entity
+            amount: Amount to add to balance (positive for receivables, negative for payables)
+        """
+        contact.balance += amount

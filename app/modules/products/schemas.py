@@ -5,6 +5,7 @@ Product DTOs (Data Transfer Objects) - equivalent to NestJS DTOs
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
+from decimal import Decimal
 
 
 class CreateProductDto(BaseModel):
@@ -13,6 +14,8 @@ class CreateProductDto(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     size: str = Field(..., min_length=1, max_length=255)
     packing: str = Field(..., min_length=1, max_length=255)
+    default_sale_price: Optional[Decimal] = Field(None, ge=0, description="Default sale price")
+    default_purchase_price: Optional[Decimal] = Field(None, ge=0, description="Default purchase price")
 
     class Config:
         from_attributes = True
@@ -33,6 +36,8 @@ class UpdateProductDto(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     size: Optional[str] = Field(None, min_length=1, max_length=255)
     packing: Optional[str] = Field(None, min_length=1, max_length=255)
+    default_sale_price: Optional[Decimal] = Field(None, ge=0, description="Default sale price")
+    default_purchase_price: Optional[Decimal] = Field(None, ge=0, description="Default purchase price")
 
     class Config:
         from_attributes = True
@@ -45,6 +50,8 @@ class ProductResponse(BaseModel):
     name: str
     size: str
     packing: str
+    default_sale_price: Optional[Decimal] = None
+    default_purchase_price: Optional[Decimal] = None
     deleted_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
@@ -108,6 +115,8 @@ class ProductDetailResponse(BaseModel):
     name: str
     size: str
     packing: str
+    default_sale_price: Optional[Decimal] = None
+    default_purchase_price: Optional[Decimal] = None
     deleted_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime

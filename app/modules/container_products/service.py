@@ -3,9 +3,9 @@ ContainerProductService - FastAPI equivalent of NestJS ContainerProductService.
 Handles complex transaction logic with pessimistic locking and inventory tracking.
 """
 
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from datetime import datetime
-from sqlalchemy import select, func, text
+from sqlalchemy import select, func, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -359,3 +359,47 @@ class ContainerProductService:
             )
             for item in input_data
         ]
+
+    @staticmethod
+    async def validate_and_get_stock(
+        db: AsyncSession,
+        items: List[Tuple[int, int]],  # List of (product_id, container_id) tuples
+    ) -> Dict[Tuple[int, int], ContainerProduct]:
+        """
+        Validate stock availability for multiple product-container pairs.
+        Single batched query for performance.
+        
+        Args:
+            db: Database session
+            items: List of (product_id, container_id) tuples
+            
+        Returns:
+            Dictionary mapping (product_id, container_id) to ContainerProduct entity
+            
+        Raises:
+            ValidationError: If any product not found in specified container
+        """
+        if not items:
+            return {}
+            
+        # Batch fetch all ContainerProduct rows in single query
+        container_product_query = select(ContainerProduct).where(
+            tuple_(ContainerProduct.product_id, ContainerProduct.container_id).in_(items)
+        )
+        cp_result = await db.execute(container_product_query)
+        container_products = cp_result.scalars().all()
+        
+        # Build lookup map
+        container_product_map = {
+            (cp.product_id, cp.container_id): cp for cp in container_products
+        }
+        
+        # Validate all requested pairs exist
+        if len(container_product_map) != len(set(items)):
+            found_keys = set(container_product_map.keys())
+            missing_keys = set(items) - found_keys
+            raise ValidationError(
+                f"Products not found in specified containers: {list(missing_keys)}"
+            )
+        
+        return container_product_map

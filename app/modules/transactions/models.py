@@ -141,8 +141,13 @@ class Transaction(BaseModel):
         lazy="joined",
     )
 
-    def __repr__(self) -> str:
-        return f"<Transaction(id={self.id}, number='{self.transaction_number}', type={self.type.value}, total={self.total_amount})>"
+    @property
+    def balance_due(self) -> Decimal:
+        """
+        Calculate the outstanding balance on this transaction.
+        Returns: total_amount - paid_amount
+        """
+        return self.total_amount - self.paid_amount
 
 
 class TransactionItem(BaseModel):
@@ -167,7 +172,11 @@ class TransactionItem(BaseModel):
 
     # Foreign Keys
     transaction_id: Mapped[int] = mapped_column(
-        ForeignKey("transactions.id", ondelete="CASCADE", name="fk_transaction_item_transaction_id"),
+        ForeignKey(
+            "transactions.id",
+            ondelete="CASCADE",
+            name="fk_transaction_item_transaction_id",
+        ),
         nullable=False,
         index=True,
     )
@@ -203,9 +212,7 @@ class TransactionItem(BaseModel):
 
     product: Mapped["Product"] = relationship("Product", lazy="joined")
 
-    container: Mapped[Optional["Container"]] = relationship(
-        "Container", lazy="joined"
-    )
+    container: Mapped[Optional["Container"]] = relationship("Container", lazy="joined")
 
     def __repr__(self) -> str:
         return f"<TransactionItem(id={self.id}, transaction_id={self.transaction_id}, product_id={self.product_id}, qty={self.quantity}, total={self.line_total})>"
@@ -228,7 +235,9 @@ class Payment(BaseModel):
 
     # Foreign Keys
     transaction_id: Mapped[int] = mapped_column(
-        ForeignKey("transactions.id", ondelete="CASCADE", name="fk_payment_transaction_id"),
+        ForeignKey(
+            "transactions.id", ondelete="CASCADE", name="fk_payment_transaction_id"
+        ),
         nullable=False,
         index=True,
     )
@@ -258,4 +267,3 @@ class Payment(BaseModel):
 
     def __repr__(self) -> str:
         return f"<Payment(id={self.id}, transaction_id={self.transaction_id}, amount={self.amount}, method={self.payment_method.value})>"
-

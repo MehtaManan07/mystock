@@ -1,4 +1,4 @@
-# from app.modules.transactions.router import router
+from app.modules.transactions.router import router
 
-# __all__ = ["router"]
+__all__ = ["router"]
 

@@ -27,6 +27,14 @@ class Config(BaseSettings):
     aws_access_key_id: str = Field(default="", alias="MY_AWS_ACCESS_KEY_ID")
     aws_secret_access_key: str = Field(default="", alias="MY_AWS_SECRET_ACCESS_KEY")
 
+    # Redis Configuration
+    redis_host: str = Field(default="localhost", alias="REDIS_HOST")
+    redis_port: int = Field(default=6379, alias="REDIS_PORT")
+    redis_password: str = Field(default="", alias="REDIS_PASSWORD")
+    redis_ssl: bool = Field(default=False, alias="REDIS_SSL")
+    redis_db: int = Field(default=0, alias="REDIS_DB")
+    redis_decode_responses: bool = Field(default=True, alias="REDIS_DECODE_RESPONSES")
+
     is_production: bool = (
         os.getenv("ENVIRONMENT", "development").lower() == "production"
     )

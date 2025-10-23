@@ -3,7 +3,7 @@ ProductService - FastAPI equivalent of NestJS ProductService.
 Optimized queries with eager loading for relationships.
 """
 
-from typing import List, Optional
+from typing import List, Optional, Dict
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -268,3 +268,41 @@ class ProductService:
 
         product.deleted_at = datetime.utcnow()
         await db.flush()
+
+    @staticmethod
+    async def validate_products_exist(
+        db: AsyncSession, product_ids: List[int]
+    ) -> Dict[int, Product]:
+        """
+        Validate that all products exist and return them as a dict.
+        Single batched query for performance.
+        
+        Args:
+            db: Database session
+            product_ids: List of product IDs to validate
+            
+        Returns:
+            Dictionary mapping product_id to Product entity
+            
+        Raises:
+            NotFoundError: If any product not found
+        """
+        if not product_ids:
+            return {}
+            
+        # Batch fetch all products in single query
+        products_query = select(Product).where(
+            Product.id.in_(product_ids),
+            Product.deleted_at.is_(None)
+        )
+        products_result = await db.execute(products_query)
+        products = products_result.scalars().all()
+
+        # Validate all products found
+        if len(products) != len(set(product_ids)):
+            found_ids = {p.id for p in products}
+            missing_ids = set(product_ids) - found_ids
+            raise NotFoundError("Products", list(missing_ids))
+
+        # Return as dict for O(1) lookup
+        return {p.id: p for p in products}
