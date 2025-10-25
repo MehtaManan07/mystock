@@ -44,6 +44,7 @@ origins = [
     "http://localhost",
     "http://localhost:5173",
     "http://mayuragency.surge.sh",
+    "https://mystockapp.duckdns.org",  # production
 ]
 
 app.add_middleware(
