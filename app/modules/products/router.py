@@ -21,7 +21,7 @@ from .schemas import (
 router = APIRouter(prefix="/products", tags=["products"])
 
 
-@router.post("/", response_model=ProductResponse)
+@router.post("", response_model=ProductResponse)
 async def create_product(
     dto: CreateProductDto,
     db: AsyncSession = Depends(get_db_util)
@@ -68,7 +68,7 @@ async def bulk_create_products(
     ]
 
 
-@router.get("/", response_model=List[ProductResponse])
+@router.get("", response_model=List[ProductResponse])
 async def get_all_products(
     search: Optional[str] = Query(None, description="Search by name, size, or packing"),
     db: AsyncSession = Depends(get_db_util)

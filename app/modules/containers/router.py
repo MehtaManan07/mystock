@@ -21,7 +21,7 @@ from .schemas import (
 router = APIRouter(prefix="/containers", tags=["containers"])
 
 
-@router.post("/", response_model=ContainerResponse)
+@router.post("", response_model=ContainerResponse)
 async def create_container(
     dto: CreateContainerDto, db: AsyncSession = Depends(get_db_util)
 ):
@@ -64,7 +64,7 @@ async def bulk_create_containers(
     ]
 
 
-@router.get("/", response_model=List[ContainerResponse])
+@router.get("", response_model=List[ContainerResponse])
 async def get_all_containers(
     search: Optional[str] = Query(None, description="Search by name"),
     db: AsyncSession = Depends(get_db_util),

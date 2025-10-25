@@ -16,7 +16,7 @@ from .models import Role
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-@router.get("/", response_model=List[UserResponse])
+@router.get("", response_model=List[UserResponse])
 async def get_all_users(db: AsyncSession = Depends(get_db_util)):
     """Get all users"""
     users = await UsersService.find_all(db)

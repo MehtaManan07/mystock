@@ -17,7 +17,7 @@ from .schemas import (
 router = APIRouter(prefix="/inventory-logs", tags=["Inventory Logs"])
 
 
-@router.post("/", response_model=InventoryLogResponse, status_code=201)
+@router.post("", response_model=InventoryLogResponse, status_code=201)
 async def create_log(
     dto: CreateInventoryLogDto,
     db: AsyncSession = Depends(get_db_util),
@@ -93,7 +93,7 @@ async def get_logs_for_container(
     return logs
 
 
-@router.get("/", response_model=List[InventoryLogResponse])
+@router.get("", response_model=List[InventoryLogResponse])
 async def get_all_logs(
     db: AsyncSession = Depends(get_db_util),
 ):
