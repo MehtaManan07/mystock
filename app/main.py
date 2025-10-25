@@ -58,14 +58,14 @@ app.add_middleware(
 # Add Success Response Interceptor (must be added after CORS)
 app.add_middleware(SuccessResponseInterceptor)
 
-# Include routers
-app.include_router(users_router)
-app.include_router(products_router)
-app.include_router(containers_router)
-app.include_router(container_products_router)
-app.include_router(contacts_router)
-app.include_router(transactions_router)
-app.include_router(inventory_logs_router)
+# Include routers with /api prefix
+app.include_router(users_router, prefix="/api")
+app.include_router(products_router, prefix="/api")
+app.include_router(containers_router, prefix="/api")
+app.include_router(container_products_router, prefix="/api")
+app.include_router(contacts_router, prefix="/api")
+app.include_router(transactions_router, prefix="/api")
+app.include_router(inventory_logs_router, prefix="/api")
 
 
 @app.get("/demo")
