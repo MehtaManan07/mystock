@@ -3,7 +3,7 @@
 # deployment/prod.sh - Deploy mystock app for production (EC2)
 # Usage: ./deployment/prod.sh
 
-APP_NAME="mystock"
+APP_NAME="fastapi"
 APP_DIR="/home/ec2-user/mystock"
 VENV_DIR="/home/ec2-user/mystock/venv"
 
