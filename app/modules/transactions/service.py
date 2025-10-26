@@ -3,7 +3,7 @@ TransactionsService - Business logic for sales and purchase transactions.
 Handles inventory updates, payment tracking, and contact balance management.
 """
 
-from typing import List, Optional, Dict, Tuple, cast
+from typing import List, Optional, Dict, Tuple, cast, Union
 from datetime import date
 from decimal import Decimal
 from sqlalchemy import select, func, desc, tuple_
@@ -88,21 +88,244 @@ class TransactionsService:
             return f"{prefix}-0001"
 
     @staticmethod
-    async def create_sale(db: AsyncSession, sale_data: CreateSaleDto) -> Transaction:
+    async def _create_transaction(
+        db: AsyncSession,
+        transaction_type: TransactionType,
+        transaction_data: Union[CreateSaleDto, CreatePurchaseDto],
+    ) -> Transaction:
         """
-        Create a new sale transaction with inventory deduction.
+        Unified transaction creation for both sales and purchases.
         Uses delegated service methods for clean architecture.
 
         Business Logic:
-        1. Validate contact is customer or both (delegated)
-        2. Validate all products exist (delegated)
-        3. Validate all containers have sufficient stock (delegated)
+        1. Validate contact (customer for sale, supplier for purchase)
+        2. Validate all products exist
+        3. Validate/manage container stock
         4. Create transaction with auto-generated number
         5. Create transaction items
-        6. Deduct inventory from containers
+        6. Update inventory (decrease for sale, increase for purchase)
         7. Create inventory logs
-        8. Update contact balance (delegated)
+        8. Update contact balance
         9. Create payment record if paid_amount > 0
+        10. Generate invoice in background
+
+        Args:
+            db: Database session
+            transaction_type: Type of transaction (sale or purchase)
+            transaction_data: Transaction creation data
+
+        Returns:
+            Created transaction with all relationships
+
+        Raises:
+            ValidationError: If validation fails
+            NotFoundError: If contact/product/container not found
+        """
+        is_sale = transaction_type == TransactionType.sale
+
+        # STEP 1: Validate Contact (Delegated to ContactsService)
+        if is_sale:
+            contact = await ContactsService.validate_for_sale(db, transaction_data.contact_id)
+        else:
+            contact = await ContactsService.validate_for_purchase(db, transaction_data.contact_id)
+
+        # STEP 2: Validate Products (Delegated to ProductsService)
+        product_ids = [item.product_id for item in transaction_data.items]
+        products_dict = await ProductService.validate_products_exist(db, product_ids)
+
+        # STEP 3: Validate Container Stock
+        # Ensure all items have container_id
+        for item in transaction_data.items:
+            if not item.container_id:
+                raise ValidationError(
+                    f"Container ID is required for {transaction_type.value}s of product ID {item.product_id}"
+                )
+
+        pairs: List[Tuple[int, int]] = [
+            (item.product_id, cast(int, item.container_id))
+            for item in transaction_data.items
+        ]
+
+        if is_sale:
+            # For sales: validate sufficient stock exists
+            container_product_map = await ContainerProductService.validate_and_get_stock(
+                db, pairs
+            )
+            
+            # Validate sufficient stock
+            for item in transaction_data.items:
+                assert item.container_id is not None
+                key = (item.product_id, item.container_id)
+                container_product = container_product_map[key]
+
+                if container_product.quantity < item.quantity:
+                    product_name = products_dict[item.product_id].name
+                    raise ValidationError(
+                        f"Insufficient stock for '{product_name}'. "
+                        f"Available: {container_product.quantity}, Required: {item.quantity}"
+                    )
+        else:
+            # For purchases: fetch existing container-products (create later if needed)
+            container_product_query = select(ContainerProduct).where(
+                tuple_(ContainerProduct.product_id, ContainerProduct.container_id).in_(pairs)
+            )
+            cp_result = await db.execute(container_product_query)
+            container_products = cp_result.scalars().all()
+            container_product_map: Dict[Tuple[int, int], ContainerProduct] = {
+                (cp.product_id, cp.container_id): cp for cp in container_products
+            }
+
+        # STEP 4: Calculate Totals
+        subtotal = sum(item.quantity * item.unit_price for item in transaction_data.items)
+        total_amount = subtotal + transaction_data.tax_amount - transaction_data.discount_amount
+
+        if transaction_data.paid_amount > total_amount:
+            raise ValidationError(
+                f"Paid amount ({transaction_data.paid_amount}) cannot exceed total ({total_amount})"
+            )
+
+        # Determine payment status
+        if transaction_data.paid_amount == 0:
+            payment_status = PaymentStatus.unpaid
+        elif transaction_data.paid_amount >= total_amount:
+            payment_status = PaymentStatus.paid
+        else:
+            payment_status = PaymentStatus.partial
+
+        # STEP 5: Generate Transaction Number
+        transaction_number = await TransactionsService._generate_transaction_number(
+            db, transaction_type
+        )
+
+        # STEP 6: Create Transaction Record
+        transaction = Transaction(
+            transaction_number=transaction_number,
+            transaction_date=transaction_data.transaction_date,
+            type=transaction_type,
+            contact_id=transaction_data.contact_id,
+            subtotal=subtotal,
+            tax_amount=transaction_data.tax_amount,
+            discount_amount=transaction_data.discount_amount,
+            total_amount=total_amount,
+            paid_amount=transaction_data.paid_amount,
+            payment_status=payment_status,
+            notes=transaction_data.notes,
+        )
+        db.add(transaction)
+        await db.flush()  # Get transaction.id
+
+        # STEP 7: Create Items & Update Inventory
+        transaction_items = []
+        inventory_logs = []
+
+        for item in transaction_data.items:
+            # Create transaction item
+            line_total = item.quantity * item.unit_price
+            transaction_items.append(
+                TransactionItem(
+                    transaction_id=transaction.id,
+                    product_id=item.product_id,
+                    container_id=item.container_id,
+                    quantity=item.quantity,
+                    unit_price=item.unit_price,
+                    line_total=line_total,
+                )
+            )
+
+            # Update inventory based on transaction type
+            assert item.container_id is not None
+            key = (item.product_id, item.container_id)
+
+            if is_sale:
+                # Sale: Deduct from existing stock
+                container_product = container_product_map[key]
+                old_qty = container_product.quantity
+                container_product.quantity -= item.quantity
+                new_qty = container_product.quantity
+                inventory_quantity = -item.quantity
+                action = "sale"
+            else:
+                # Purchase: Add to stock (create if needed)
+                container_product = container_product_map.get(key)
+                if container_product:
+                    old_qty = container_product.quantity
+                    container_product.quantity += item.quantity
+                    new_qty = container_product.quantity
+                else:
+                    # Create new container-product
+                    container_product = ContainerProduct(
+                        container_id=item.container_id,
+                        product_id=item.product_id,
+                        quantity=item.quantity,
+                    )
+                    db.add(container_product)
+                    old_qty = 0
+                    new_qty = item.quantity
+                    container_product_map[key] = container_product
+                inventory_quantity = item.quantity
+                action = "purchase"
+
+            # Create inventory log
+            inventory_logs.append(
+                InventoryLog(
+                    product_id=item.product_id,
+                    container_id=item.container_id,
+                    action=action,
+                    quantity=inventory_quantity,
+                    note=f"{action.capitalize()} {transaction_number} - {old_qty} → {new_qty}",
+                )
+            )
+
+        # Bulk insert
+        db.add_all(transaction_items)
+        db.add_all(inventory_logs)
+
+        # STEP 8: Update Contact Balance
+        # Sale: customer owes us (positive balance)
+        # Purchase: we owe supplier (negative balance)
+        outstanding_amount = total_amount - transaction_data.paid_amount
+        balance_change = outstanding_amount if is_sale else -outstanding_amount
+        
+        if balance_change != 0:
+            ContactsService.update_balance(contact, balance_change)
+
+        # STEP 9: Create Payment Record (if paid)
+        if transaction_data.paid_amount > 0:
+            if not transaction_data.payment_method:
+                raise ValidationError("Payment method required when paid_amount > 0")
+
+            payment = Payment(
+                transaction_id=transaction.id,
+                payment_date=transaction_data.transaction_date,
+                amount=transaction_data.paid_amount,
+                payment_method=transaction_data.payment_method,
+                reference_number=transaction_data.payment_reference,
+                notes=f"Payment for {transaction_type.value} {transaction_number}",
+            )
+            db.add(payment)
+
+        # STEP 10: Flush & Return with Relationships
+        await db.flush()
+
+        # Refresh to load relationships
+        await db.refresh(transaction, attribute_names=["contact", "items", "payments"])
+
+        # Eagerly load nested relationships
+        for item in transaction.items:
+            await db.refresh(item, attribute_names=["product", "container"])
+
+        # STEP 11: Generate invoice in background (non-blocking)
+        import asyncio
+        asyncio.create_task(
+            InvoiceService.auto_generate_invoice_after_transaction(db, transaction.id)
+        )
+
+        return transaction
+
+    @staticmethod
+    async def create_sale(db: AsyncSession, sale_data: CreateSaleDto) -> Transaction:
+        """
+        Create a new sale transaction with inventory deduction.
 
         Args:
             db: Database session
@@ -115,163 +338,9 @@ class TransactionsService:
             ValidationError: If validation fails
             NotFoundError: If contact/product/container not found
         """
-
-        # STEP 1: Validate Contact (Delegated to ContactsService)
-        # Single DB query, returns validated contact
-        contact = await ContactsService.validate_for_sale(db, sale_data.contact_id)
-
-        # STEP 2: Validate Products (Delegated to ProductsService)
-        # Single batched DB query, returns dict of products
-        product_ids = [item.product_id for item in sale_data.items]
-        products_dict = await ProductService.validate_products_exist(db, product_ids)
-
-        # STEP 3: Validate Container Stock (Delegated to ContainerProductService)
-        # Validate container_id provided for all items
-        for item in sale_data.items:
-            if not item.container_id:
-                raise ValidationError(
-                    f"Container ID is required for sales of product ID {item.product_id}"
-                )
-
-        # Single batched DB query, returns dict of container-products
-        # Type assertion: all container_ids are guaranteed non-None from validation above
-        pairs: List[Tuple[int, int]] = [
-            (item.product_id, cast(int, item.container_id)) for item in sale_data.items
-        ]
-        container_product_map = await ContainerProductService.validate_and_get_stock(
-            db, pairs
+        return await TransactionsService._create_transaction(
+            db, TransactionType.sale, sale_data
         )
-
-        # Validate sufficient stock (using pre-fetched data, no DB calls)
-        for item in sale_data.items:
-            assert item.container_id is not None
-            key = (item.product_id, item.container_id)
-            container_product = container_product_map[key]
-
-            if container_product.quantity < item.quantity:
-                product_name = products_dict[item.product_id].name
-                raise ValidationError(
-                    f"Insufficient stock for '{product_name}'. "
-                    f"Available: {container_product.quantity}, Required: {item.quantity}"
-                )
-
-        # STEP 4: Calculate Totals (Pure logic, no DB calls)
-        subtotal = sum(item.quantity * item.unit_price for item in sale_data.items)
-        total_amount = subtotal + sale_data.tax_amount - sale_data.discount_amount
-
-        if sale_data.paid_amount > total_amount:
-            raise ValidationError(
-                f"Paid amount ({sale_data.paid_amount}) cannot exceed total ({total_amount})"
-            )
-
-        # Determine payment status
-        if sale_data.paid_amount == 0:
-            payment_status = PaymentStatus.unpaid
-        elif sale_data.paid_amount >= total_amount:
-            payment_status = PaymentStatus.paid
-        else:
-            payment_status = PaymentStatus.partial
-
-        # STEP 5: Generate Transaction Number (Helper method)
-        transaction_number = await TransactionsService._generate_transaction_number(
-            db, TransactionType.sale
-        )
-
-        # STEP 6: Create Transaction Record
-        transaction = Transaction(
-            transaction_number=transaction_number,
-            transaction_date=sale_data.transaction_date,
-            type=TransactionType.sale,
-            contact_id=sale_data.contact_id,
-            subtotal=subtotal,
-            tax_amount=sale_data.tax_amount,
-            discount_amount=sale_data.discount_amount,
-            total_amount=total_amount,
-            paid_amount=sale_data.paid_amount,
-            payment_status=payment_status,
-            notes=sale_data.notes,
-        )
-        db.add(transaction)
-        await db.flush()  # Get transaction.id
-
-        # STEP 7: Create Items & Update Inventory (Bulk operations)
-        transaction_items = []
-        inventory_logs = []
-
-        for item in sale_data.items:
-            # Create transaction item
-            line_total = item.quantity * item.unit_price
-            transaction_items.append(
-                TransactionItem(
-                    transaction_id=transaction.id,
-                    product_id=item.product_id,
-                    container_id=item.container_id,
-                    quantity=item.quantity,
-                    unit_price=item.unit_price,
-                    line_total=line_total,
-                )
-            )
-
-            # Update stock (in-memory, using pre-fetched data)
-            assert item.container_id is not None
-            key = (item.product_id, item.container_id)
-            container_product = container_product_map[key]
-            old_qty = container_product.quantity
-            container_product.quantity -= item.quantity
-
-            # Create inventory log
-            inventory_logs.append(
-                InventoryLog(
-                    product_id=item.product_id,
-                    container_id=item.container_id,
-                    action="sale",
-                    quantity=-item.quantity,  # Negative for sales
-                    note=f"Sale {transaction_number} - {old_qty} → {container_product.quantity}",
-                )
-            )
-
-        # Bulk insert
-        db.add_all(transaction_items)
-        db.add_all(inventory_logs)
-
-        # STEP 8: Update Contact Balance (Delegated to ContactsService)
-        # In-memory update, no DB call
-        balance_change = total_amount - sale_data.paid_amount
-        if balance_change > 0:
-            ContactsService.update_balance(contact, balance_change)
-
-        # STEP 9: Create Payment Record (if paid)
-        if sale_data.paid_amount > 0:
-            if not sale_data.payment_method:
-                raise ValidationError("Payment method required when paid_amount > 0")
-
-            payment = Payment(
-                transaction_id=transaction.id,
-                payment_date=sale_data.transaction_date,
-                amount=sale_data.paid_amount,
-                payment_method=sale_data.payment_method,
-                reference_number=sale_data.payment_reference,
-                notes=f"Payment for sale {transaction_number}",
-            )
-            db.add(payment)
-
-        # STEP 10: Flush & Return with Relationships
-        # Note: Don't commit here - let FastAPI dependency handle it
-        await db.flush()
-
-        # Refresh to load relationships
-        await db.refresh(transaction, attribute_names=["contact", "items", "payments"])
-
-        # Eagerly load nested relationships
-        for item in transaction.items:
-            await db.refresh(item, attribute_names=["product", "container"])
-
-        # STEP 11: Generate invoice in background (non-blocking, fire-and-forget)
-        # Note: We use asyncio.create_task to run this in background
-        import asyncio
-        asyncio.create_task(InvoiceService.auto_generate_invoice_after_transaction(db, transaction.id))
-
-        return transaction
 
     @staticmethod
     async def create_purchase(
@@ -279,18 +348,6 @@ class TransactionsService:
     ) -> Transaction:
         """
         Create a new purchase transaction with inventory addition.
-        Uses delegated service methods for clean architecture.
-
-        Business Logic:
-        1. Validate contact is supplier or both (delegated)
-        2. Validate all products exist (delegated)
-        3. Validate all containers exist (delegated)
-        4. Create transaction with auto-generated number
-        5. Create transaction items
-        6. Add inventory to containers
-        7. Create inventory logs
-        8. Update contact balance (delegated)
-        9. Create payment record if paid_amount > 0
 
         Args:
             db: Database session
@@ -303,182 +360,9 @@ class TransactionsService:
             ValidationError: If validation fails
             NotFoundError: If contact/product/container not found
         """
-
-        # STEP 1: Validate Contact (Delegated to ContactsService)
-        # Single DB query, returns validated contact
-        contact = await ContactsService.validate_for_purchase(
-            db, purchase_data.contact_id
+        return await TransactionsService._create_transaction(
+            db, TransactionType.purchase, purchase_data
         )
-
-        # STEP 2: Validate Products (Delegated to ProductsService)
-        # Single batched DB query, returns dict of products
-        product_ids = [item.product_id for item in purchase_data.items]
-        products_dict = await ProductService.validate_products_exist(db, product_ids)
-
-        # STEP 3: Validate Containers (for destination)
-        # Validate container_id provided for all items
-        for item in purchase_data.items:
-            if not item.container_id:
-                raise ValidationError(
-                    f"Container ID is required for purchases of product ID {item.product_id}"
-                )
-
-        # Get all (product_id, container_id) pairs needed
-        # For purchases, we need to check if container-product exists, if not create it
-        pairs: List[Tuple[int, int]] = [
-            (item.product_id, cast(int, item.container_id))
-            for item in purchase_data.items
-        ]
-
-        # Batch fetch existing container-products (may not exist for new products)
-        container_product_query = select(ContainerProduct).where(
-            tuple_(ContainerProduct.product_id, ContainerProduct.container_id).in_(
-                pairs
-            )
-        )
-        cp_result = await db.execute(container_product_query)
-        container_products = cp_result.scalars().all()
-
-        # Build lookup map
-        container_product_map: Dict[Tuple[int, int], ContainerProduct] = {
-            (cp.product_id, cp.container_id): cp for cp in container_products
-        }
-
-        # STEP 4: Calculate Totals (Pure logic, no DB calls)
-        subtotal = sum(item.quantity * item.unit_price for item in purchase_data.items)
-        total_amount = (
-            subtotal + purchase_data.tax_amount - purchase_data.discount_amount
-        )
-
-        if purchase_data.paid_amount > total_amount:
-            raise ValidationError(
-                f"Paid amount ({purchase_data.paid_amount}) cannot exceed total ({total_amount})"
-            )
-
-        # Determine payment status
-        if purchase_data.paid_amount == 0:
-            payment_status = PaymentStatus.unpaid
-        elif purchase_data.paid_amount >= total_amount:
-            payment_status = PaymentStatus.paid
-        else:
-            payment_status = PaymentStatus.partial
-
-        # STEP 5: Generate Transaction Number (Helper method)
-        transaction_number = await TransactionsService._generate_transaction_number(
-            db, TransactionType.purchase
-        )
-
-        # STEP 6: Create Transaction Record
-        transaction = Transaction(
-            transaction_number=transaction_number,
-            transaction_date=purchase_data.transaction_date,
-            type=TransactionType.purchase,
-            contact_id=purchase_data.contact_id,
-            subtotal=subtotal,
-            tax_amount=purchase_data.tax_amount,
-            discount_amount=purchase_data.discount_amount,
-            total_amount=total_amount,
-            paid_amount=purchase_data.paid_amount,
-            payment_status=payment_status,
-            notes=purchase_data.notes,
-        )
-        db.add(transaction)
-        await db.flush()  # Get transaction.id
-
-        # STEP 7: Create Items & Update Inventory (Bulk operations)
-        transaction_items = []
-        inventory_logs = []
-
-        for item in purchase_data.items:
-            # Create transaction item
-            line_total = item.quantity * item.unit_price
-            transaction_items.append(
-                TransactionItem(
-                    transaction_id=transaction.id,
-                    product_id=item.product_id,
-                    container_id=item.container_id,
-                    quantity=item.quantity,
-                    unit_price=item.unit_price,
-                    line_total=line_total,
-                )
-            )
-
-            # Update or create container stock
-            assert item.container_id is not None
-            key = (item.product_id, item.container_id)
-            container_product = container_product_map.get(key)
-
-            if container_product:
-                # Existing container-product: add to quantity
-                old_qty = container_product.quantity
-                container_product.quantity += item.quantity
-                new_qty = container_product.quantity
-            else:
-                # New container-product: create it
-                container_product = ContainerProduct(
-                    container_id=item.container_id,
-                    product_id=item.product_id,
-                    quantity=item.quantity,
-                )
-                db.add(container_product)
-                old_qty = 0
-                new_qty = item.quantity
-                # Add to map for potential reuse in same transaction
-                container_product_map[key] = container_product
-
-            # Create inventory log
-            inventory_logs.append(
-                InventoryLog(
-                    product_id=item.product_id,
-                    container_id=item.container_id,
-                    action="purchase",
-                    quantity=item.quantity,  # Positive for purchases
-                    note=f"Purchase {transaction_number} - {old_qty} → {new_qty}",
-                )
-            )
-
-        # Bulk insert transaction items and inventory logs
-        db.add_all(transaction_items)
-        db.add_all(inventory_logs)
-
-        # STEP 8: Update Contact Balance (Delegated to ContactsService)
-        # In-memory update, no DB call
-        # For purchases: negative balance means we owe the supplier
-        balance_change = -(total_amount - purchase_data.paid_amount)
-        if balance_change != 0:
-            ContactsService.update_balance(contact, balance_change)
-
-        # STEP 9: Create Payment Record (if paid)
-        if purchase_data.paid_amount > 0:
-            if not purchase_data.payment_method:
-                raise ValidationError("Payment method required when paid_amount > 0")
-
-            payment = Payment(
-                transaction_id=transaction.id,
-                payment_date=purchase_data.transaction_date,
-                amount=purchase_data.paid_amount,
-                payment_method=purchase_data.payment_method,
-                reference_number=purchase_data.payment_reference,
-                notes=f"Payment for purchase {transaction_number}",
-            )
-            db.add(payment)
-
-        # STEP 10: Flush & Return with Relationships
-        # Note: Don't commit here - let FastAPI dependency handle it
-        await db.flush()
-
-        # Refresh to load relationships
-        await db.refresh(transaction, attribute_names=["contact", "items", "payments"])
-
-        # Eagerly load nested relationships
-        for item in transaction.items:
-            await db.refresh(item, attribute_names=["product", "container"])
-
-        # STEP 11: Generate invoice in background (non-blocking, fire-and-forget)
-        import asyncio
-        asyncio.create_task(InvoiceService.auto_generate_invoice_after_transaction(db, transaction.id))
-
-        return transaction
 
     @staticmethod
     async def record_payment(
