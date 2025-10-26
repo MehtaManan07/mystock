@@ -26,6 +26,8 @@ class Config(BaseSettings):
     aws_region: str = Field(default="", alias="MY_AWS_REGION")
     aws_access_key_id: str = Field(default="", alias="MY_AWS_ACCESS_KEY_ID")
     aws_secret_access_key: str = Field(default="", alias="MY_AWS_SECRET_ACCESS_KEY")
+    s3_bucket_name: str = Field(default="", alias="S3_BUCKET_NAME")
+    s3_invoice_prefix: str = Field(default="invoices/", alias="S3_INVOICE_PREFIX")
 
     # Redis Configuration
     redis_host: str = Field(default="localhost", alias="REDIS_HOST")

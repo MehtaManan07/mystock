@@ -9,18 +9,20 @@ from decimal import Decimal
 from .models import TransactionType, PaymentStatus, PaymentMethod
 
 
-# ============================================================================
 # Request DTOs
-# ============================================================================
 
 
 class TransactionItemCreate(BaseModel):
     """DTO for creating a transaction item (line item)"""
 
     product_id: int = Field(..., gt=0, description="Product ID")
-    container_id: Optional[int] = Field(None, gt=0, description="Container ID (required for sales)")
+    container_id: Optional[int] = Field(
+        None, gt=0, description="Container ID (required for sales)"
+    )
     quantity: int = Field(..., gt=0, description="Quantity must be positive")
-    unit_price: Decimal = Field(..., ge=0, description="Unit price (can be 0 for free items)")
+    unit_price: Decimal = Field(
+        ..., ge=0, description="Unit price (can be 0 for free items)"
+    )
 
     class Config:
         from_attributes = True
@@ -31,16 +33,28 @@ class CreateTransactionDto(BaseModel):
 
     transaction_date: date = Field(..., description="Date of transaction")
     contact_id: int = Field(..., gt=0, description="Contact ID (customer or supplier)")
-    items: List[TransactionItemCreate] = Field(..., min_length=1, description="Transaction items (at least one)")
-    
-    tax_amount: Decimal = Field(default=Decimal("0.0"), ge=0, description="Tax/GST amount")
-    discount_amount: Decimal = Field(default=Decimal("0.0"), ge=0, description="Discount amount")
-    
+    items: List[TransactionItemCreate] = Field(
+        ..., min_length=1, description="Transaction items (at least one)"
+    )
+
+    tax_amount: Decimal = Field(
+        default=Decimal("0.0"), ge=0, description="Tax/GST amount"
+    )
+    discount_amount: Decimal = Field(
+        default=Decimal("0.0"), ge=0, description="Discount amount"
+    )
+
     # Payment fields (if paying at time of transaction)
-    paid_amount: Decimal = Field(default=Decimal("0.0"), ge=0, description="Amount paid immediately")
-    payment_method: Optional[PaymentMethod] = Field(None, description="Payment method (required if paid_amount > 0)")
-    payment_reference: Optional[str] = Field(None, max_length=100, description="Payment reference number")
-    
+    paid_amount: Decimal = Field(
+        default=Decimal("0.0"), ge=0, description="Amount paid immediately"
+    )
+    payment_method: Optional[PaymentMethod] = Field(
+        None, description="Payment method (required if paid_amount > 0)"
+    )
+    payment_reference: Optional[str] = Field(
+        None, max_length=100, description="Payment reference number"
+    )
+
     notes: Optional[str] = Field(None, max_length=1000, description="Additional notes")
 
     class Config:
@@ -49,7 +63,7 @@ class CreateTransactionDto(BaseModel):
 
 class CreateSaleDto(CreateTransactionDto):
     """DTO for creating a sale transaction"""
-    
+
     # Inherits all fields from CreateTransactionDto
     # Sale-specific validation will be done in service layer:
     # - Contact must be customer or both
@@ -60,7 +74,7 @@ class CreateSaleDto(CreateTransactionDto):
 
 class CreatePurchaseDto(CreateTransactionDto):
     """DTO for creating a purchase transaction"""
-    
+
     # Inherits all fields from CreateTransactionDto
     # Purchase-specific validation will be done in service layer:
     # - Contact must be supplier or both
@@ -74,7 +88,9 @@ class CreatePaymentDto(BaseModel):
     payment_date: date = Field(..., description="Date of payment")
     amount: Decimal = Field(..., gt=0, description="Payment amount (must be positive)")
     payment_method: PaymentMethod = Field(..., description="Payment method")
-    reference_number: Optional[str] = Field(None, max_length=100, description="Payment reference number")
+    reference_number: Optional[str] = Field(
+        None, max_length=100, description="Payment reference number"
+    )
     notes: Optional[str] = Field(None, max_length=1000, description="Payment notes")
 
     class Config:
@@ -84,20 +100,24 @@ class CreatePaymentDto(BaseModel):
 class TransactionFilterDto(BaseModel):
     """DTO for filtering transactions"""
 
-    type: Optional[TransactionType] = Field(None, description="Filter by transaction type")
-    payment_status: Optional[PaymentStatus] = Field(None, description="Filter by payment status")
+    type: Optional[TransactionType] = Field(
+        None, description="Filter by transaction type"
+    )
+    payment_status: Optional[PaymentStatus] = Field(
+        None, description="Filter by payment status"
+    )
     contact_id: Optional[int] = Field(None, gt=0, description="Filter by contact")
     from_date: Optional[date] = Field(None, description="Filter from this date")
     to_date: Optional[date] = Field(None, description="Filter to this date")
-    search: Optional[str] = Field(None, max_length=100, description="Search in transaction number or notes")
+    search: Optional[str] = Field(
+        None, max_length=100, description="Search in transaction number or notes"
+    )
 
     class Config:
         from_attributes = True
 
 
-# ============================================================================
 # Response DTOs - Nested models for relationships
-# ============================================================================
 
 
 class ProductInTransactionResponse(BaseModel):
@@ -176,23 +196,31 @@ class TransactionResponse(BaseModel):
     transaction_date: date
     type: TransactionType
     contact: ContactInTransactionResponse
-    
+
     items: List[TransactionItemResponse]
-    
+
     subtotal: Decimal
     tax_amount: Decimal
     discount_amount: Decimal
     total_amount: Decimal
     paid_amount: Decimal
     payment_status: PaymentStatus
-    
+
     # Computed field
     balance_due: Decimal = Field(..., description="Total amount - paid amount")
-    
+
     notes: Optional[str] = None
-    
+
+    # Invoice fields
+    invoice_url: Optional[str] = Field(
+        None, description="S3 URL of generated invoice PDF"
+    )
+    invoice_checksum: Optional[str] = Field(
+        None, description="MD5 checksum of invoice PDF"
+    )
+
     payments: List[PaymentResponse]
-    
+
     created_at: datetime
     updated_at: datetime
     deleted_at: Optional[datetime] = None
@@ -219,9 +247,7 @@ class TransactionListItemResponse(BaseModel):
         from_attributes = True
 
 
-# ============================================================================
 # Summary/Report DTOs
-# ============================================================================
 
 
 class TransactionSummaryResponse(BaseModel):
@@ -230,13 +256,21 @@ class TransactionSummaryResponse(BaseModel):
     total_sales: Decimal = Field(..., description="Total sales amount")
     total_purchases: Decimal = Field(..., description="Total purchases amount")
     total_sales_paid: Decimal = Field(..., description="Total sales paid amount")
-    total_purchases_paid: Decimal = Field(..., description="Total purchases paid amount")
-    
-    outstanding_receivables: Decimal = Field(..., description="Amount customers owe (unpaid sales)")
-    outstanding_payables: Decimal = Field(..., description="Amount we owe suppliers (unpaid purchases)")
-    
+    total_purchases_paid: Decimal = Field(
+        ..., description="Total purchases paid amount"
+    )
+
+    outstanding_receivables: Decimal = Field(
+        ..., description="Amount customers owe (unpaid sales)"
+    )
+    outstanding_payables: Decimal = Field(
+        ..., description="Amount we owe suppliers (unpaid purchases)"
+    )
+
     total_sales_count: int = Field(..., description="Number of sales transactions")
-    total_purchases_count: int = Field(..., description="Number of purchase transactions")
+    total_purchases_count: int = Field(
+        ..., description="Number of purchase transactions"
+    )
 
     class Config:
         from_attributes = True
@@ -259,3 +293,16 @@ class OutstandingTransactionResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
+class InvoiceMetadataResponse(BaseModel):
+    """Response for invoice metadata (optimized endpoint)"""
+
+    transaction_id: int
+    transaction_number: str
+    invoice_url: Optional[str] = Field(None, description="S3 URL of invoice PDF")
+    invoice_checksum: Optional[str] = Field(
+        None, description="MD5 checksum for integrity verification"
+    )
+
+    class Config:
+        from_attributes = True

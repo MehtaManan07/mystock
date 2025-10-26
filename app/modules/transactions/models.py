@@ -61,6 +61,7 @@ class Transaction(BaseModel):
         Index("idx_transaction_contact_id", "contact_id"),
         Index("idx_transaction_date", "transaction_date"),
         Index("idx_transaction_type_status", "type", "payment_status"),
+        Index("idx_transaction_invoice_url", "invoice_url"),
     )
 
     transaction_number: Mapped[str] = mapped_column(
@@ -123,6 +124,15 @@ class Transaction(BaseModel):
     )
 
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default=None)
+
+    # Invoice fields (for PDF generation and storage)
+    invoice_url: Mapped[Optional[str]] = mapped_column(
+        String(500), nullable=True, default=None, index=True
+    )
+    
+    invoice_checksum: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, default=None
+    )
 
     # Relationships
     contact: Mapped["Contact"] = relationship("Contact", lazy="joined")

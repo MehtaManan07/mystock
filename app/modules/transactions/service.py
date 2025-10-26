@@ -35,6 +35,10 @@ from app.modules.container_products.service import ContainerProductService
 from app.modules.inventory_logs.models import InventoryLog
 
 
+# Import invoice service for background invoice generation
+from .invoice_service import InvoiceService
+
+
 class TransactionsService:
     """
     Transactions service for managing sales and purchases.
@@ -262,6 +266,11 @@ class TransactionsService:
         for item in transaction.items:
             await db.refresh(item, attribute_names=["product", "container"])
 
+        # STEP 11: Generate invoice in background (non-blocking, fire-and-forget)
+        # Note: We use asyncio.create_task to run this in background
+        import asyncio
+        asyncio.create_task(InvoiceService.auto_generate_invoice_after_transaction(db, transaction.id))
+
         return transaction
 
     @staticmethod
@@ -464,6 +473,10 @@ class TransactionsService:
         # Eagerly load nested relationships
         for item in transaction.items:
             await db.refresh(item, attribute_names=["product", "container"])
+
+        # STEP 11: Generate invoice in background (non-blocking, fire-and-forget)
+        import asyncio
+        asyncio.create_task(InvoiceService.auto_generate_invoice_after_transaction(db, transaction.id))
 
         return transaction
 

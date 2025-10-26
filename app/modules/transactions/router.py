@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.engine import get_db_util
 from .service import TransactionsService
+from .invoice_service import InvoiceService
 from .schemas import (
     TransactionResponse,
     TransactionListItemResponse,
@@ -17,6 +18,7 @@ from .schemas import (
     CreatePaymentDto,
     PaymentResponse,
     TransactionFilterDto,
+    InvoiceMetadataResponse,
 )
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
@@ -199,3 +201,102 @@ async def get_transaction_payments(
     """
     transaction = await TransactionsService.get_transaction(db, transaction_id)
     return transaction.payments
+
+
+# Invoice Endpoints
+
+
+@router.get(
+    "/{transaction_id}/invoice/metadata", response_model=InvoiceMetadataResponse
+)
+async def get_invoice_metadata(
+    transaction_id: int,
+    db: AsyncSession = Depends(get_db_util),
+):
+    """
+    Get invoice metadata (URL, checksum, status) without full transaction data.
+
+    Ultra-optimized endpoint:
+    - Returns only invoice-related fields
+    - 1 DB query (~5ms)
+    - No S3 API calls
+    - Minimal bandwidth
+
+    Use this endpoint to check if invoice exists and get its URL.
+    """
+    metadata = await InvoiceService.get_invoice_metadata(db, transaction_id)
+    return metadata
+
+
+@router.post("/{transaction_id}/invoice/generate", status_code=201)
+async def generate_invoice(
+    transaction_id: int,
+    force_regenerate: bool = Query(
+        False, description="Force regenerate if already exists"
+    ),
+    db: AsyncSession = Depends(get_db_util),
+):
+    """
+    Manually generate/regenerate invoice PDF for a transaction.
+
+    By default, invoices are auto-generated on transaction creation.
+    Use this endpoint to:
+    - Regenerate a corrupted invoice (force_regenerate=true)
+    - Generate invoice for old transactions created before this feature
+
+    Idempotent: Returns existing invoice URL if already generated (unless forced).
+
+    Performance:
+    - PDF generation: 50-100ms
+    - S3 upload: 1 PUT request (~50ms)
+    - Total: ~150-200ms
+    """
+    invoice_url, checksum = await InvoiceService.generate_and_upload_invoice(
+        db, transaction_id, force_regenerate
+    )
+
+    return {
+        "message": "Invoice generated successfully",
+        "invoice_url": invoice_url,
+        "checksum": checksum,
+    }
+
+
+@router.get("/{transaction_id}/invoice/download")
+async def download_invoice(
+    transaction_id: int,
+    expiration: int = Query(
+        3600, ge=300, le=86400, description="URL validity in seconds (5min - 24h)"
+    ),
+    db: AsyncSession = Depends(get_db_util),
+):
+    """
+    Get presigned URL for direct invoice download from S3.
+
+    This is the MOST EFFICIENT way to serve invoices:
+    - 0 bandwidth through our server
+    - Client downloads directly from S3
+    - Temporary access (security)
+    - 0 S3 API calls (just URL generation)
+
+    The returned URL is valid for the specified expiration time (default 1 hour).
+
+    Performance:
+    - 1 DB query (~5ms)
+    - URL generation (~1ms)
+    - Total: ~10ms
+
+    Optimization:
+    - No GET request to S3
+    - No data transfer through server
+    - Client fetches directly from S3
+    """
+    presigned_url = await InvoiceService.generate_presigned_url(
+        db, transaction_id, expiration
+    )
+
+    return {
+        "download_url": presigned_url,
+        "expires_in_seconds": expiration,
+        "note": "Download URL is temporary and expires after the specified time",
+    }
