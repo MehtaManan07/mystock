@@ -71,7 +71,8 @@ class InvoicePDF(FPDF):
         # --- Table Header ---
         pdf.set_font("Helvetica", "B", 11)
         pdf.set_fill_color(245, 245, 245)
-        pdf.cell(90, 8, "Product", border=1, fill=True)
+        pdf.cell(15, 8, "Sr#", border=1, fill=True, align="C")
+        pdf.cell(75, 8, "Product", border=1, fill=True)
         pdf.cell(25, 8, "Qty", border=1, align="R", fill=True)
         pdf.cell(35, 8, "Unit Price", border=1, align="R", fill=True)
         pdf.cell(35, 8, "Total", border=1, align="R", fill=True)
@@ -79,8 +80,9 @@ class InvoicePDF(FPDF):
 
         # --- Table Items ---
         pdf.set_font("Helvetica", "", 10)
-        for item in transaction.items:
-            pdf.cell(90, 8, item.product.name, border=1)
+        for idx, item in enumerate(transaction.items, start=1):
+            pdf.cell(15, 8, str(idx), border=1, align="C")
+            pdf.cell(75, 8, item.product.name, border=1)
             pdf.cell(25, 8, str(item.quantity), border=1, align="R")
             pdf.cell(35, 8, f"{item.unit_price:.2f}", border=1, align="R")
             pdf.cell(35, 8, f"{item.line_total:.2f}", border=1, align="R")

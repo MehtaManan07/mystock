@@ -14,11 +14,10 @@ from app.core.exceptions import ValidationError, NotFoundError
 from .models import (
     Transaction,
     TransactionItem,
-    Payment,
     TransactionType,
     PaymentStatus,
-    PaymentMethod,
 )
+from app.modules.payments.models import Payment, PaymentMethod
 from .schemas import (
     CreateSaleDto,
     CreatePurchaseDto,

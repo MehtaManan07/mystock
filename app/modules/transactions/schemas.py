@@ -6,7 +6,8 @@ from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime, date
 from decimal import Decimal
-from .models import TransactionType, PaymentStatus, PaymentMethod
+from .models import TransactionType, PaymentStatus
+from app.modules.payments.models import PaymentMethod
 
 
 # Request DTOs
