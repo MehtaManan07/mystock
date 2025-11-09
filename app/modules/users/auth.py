@@ -97,29 +97,6 @@ class AuthService:
         return encoded_jwt
 
     @staticmethod
-    def create_refresh_token(data: Dict[str, Any]) -> str:
-        """
-        Create a JWT refresh token with extended expiration (7 days).
-        
-        Args:
-            data: Dictionary containing user data (user_id, username)
-            
-        Returns:
-            Encoded JWT refresh token as string
-        """
-        to_encode = data.copy()
-        expire = datetime.utcnow() + timedelta(days=7)
-        to_encode.update({
-            "exp": expire,
-            "iat": datetime.utcnow(),
-            "type": "refresh"
-        })
-        encoded_jwt = jwt.encode(
-            to_encode, config.secret_key, algorithm=config.algorithm
-        )
-        return encoded_jwt
-
-    @staticmethod
     def verify_token(token: str) -> Optional[TokenData]:
         """
         Verify and decode a JWT token.
@@ -144,29 +121,6 @@ class AuthService:
             return TokenData(user_id=user_id, username=username, role=role)
         except ExpiredSignatureError:
             raise UnauthorizedError("Token has expired")
-        except PyJWTError:
-            return None
-
-    @staticmethod
-    def verify_refresh_token(token: str) -> Optional[Dict[str, Any]]:
-        """
-        Verify a refresh token and extract payload.
-        
-        Args:
-            token: JWT refresh token to verify
-            
-        Returns:
-            Token payload if valid, None if invalid
-        """
-        try:
-            payload: Dict[str, Any] = jwt.decode(
-                token, config.secret_key, algorithms=[config.algorithm]
-            )
-            if payload.get("type") != "refresh":
-                return None
-            return payload
-        except ExpiredSignatureError:
-            raise UnauthorizedError("Refresh token has expired")
         except PyJWTError:
             return None
 

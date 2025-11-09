@@ -14,7 +14,6 @@ from .schemas import (
     LoginRequest,
     LoginResponse,
     TokenResponse,
-    RefreshTokenRequest,
     UpdateUserDto,
     RegisterRequest,
     RegisterResponse,
@@ -69,13 +68,11 @@ class UsersService:
             "role": user.role.value
         }
         access_token = AuthService.create_access_token(token_data)
-        refresh_token = AuthService.create_refresh_token(token_data)
         
         return RegisterResponse(
             user=user_response,
             token=TokenResponse(
                 access_token=access_token,
-                refresh_token=refresh_token,
                 token_type="bearer"
             ),
         )
@@ -100,13 +97,11 @@ class UsersService:
             "role": user.role.value
         }
         access_token = AuthService.create_access_token(token_data)
-        refresh_token = AuthService.create_refresh_token(token_data)
         
         return LoginResponse(
             user=user_response,
             token=TokenResponse(
                 access_token=access_token,
-                refresh_token=refresh_token,
                 token_type="bearer"
             ),
         )
@@ -235,46 +230,3 @@ class UsersService:
         if user:
             user.deleted_at = datetime.utcnow()
             await db.flush()
-
-    @staticmethod
-    async def refresh_token(db: AsyncSession, refresh_request: RefreshTokenRequest) -> TokenResponse:
-        """
-        Generate new access token using refresh token.
-        
-        Args:
-            db: Database session
-            refresh_request: Request containing refresh token
-            
-        Returns:
-            New access and refresh tokens
-            
-        Raises:
-            UnauthorizedError: If refresh token is invalid
-        """
-        payload: Dict[str, Any] | None = AuthService.verify_refresh_token(refresh_request.refresh_token)
-        
-        if not payload:
-            raise UnauthorizedError("Invalid refresh token")
-        
-        username: str | None = payload.get("sub")
-        user_id: int | None = payload.get("user_id")
-        
-        # Verify user still exists
-        user: User | None = await db.scalar(select(User).where(User.id == user_id))
-        if not user:
-            raise UnauthorizedError("User not found")
-        
-        # Create new tokens
-        token_data: Dict[str, Any] = {
-            "sub": user.username,
-            "user_id": user.id,
-            "role": user.role.value
-        }
-        access_token: str = AuthService.create_access_token(token_data)
-        refresh_token: str = AuthService.create_refresh_token(token_data)
-        
-        return TokenResponse(
-            access_token=access_token,
-            refresh_token=refresh_token,
-            token_type="bearer"
-        )

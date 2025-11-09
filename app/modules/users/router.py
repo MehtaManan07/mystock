@@ -15,7 +15,6 @@ from .schemas import (
     LoginResponse,
     RegisterRequest,
     RegisterResponse,
-    RefreshTokenRequest,
     TokenResponse,
     UserResponse,
     UpdateUserDto,
@@ -44,15 +43,6 @@ async def register_user(
 async def login_user(login_dto: LoginRequest, db: AsyncSession = Depends(get_db_util)):
     """Login a user and receive JWT tokens"""
     return await UsersService.login(db, login_dto)
-
-
-@router.post("/refresh", response_model=TokenResponse)
-async def refresh_token(
-    refresh_request: RefreshTokenRequest,
-    db: AsyncSession = Depends(get_db_util)
-):
-    """Refresh access token using refresh token"""
-    return await UsersService.refresh_token(db, refresh_request)
 
 
 @router.get("", response_model=List[UserResponse])
