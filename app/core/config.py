@@ -40,6 +40,10 @@ class Config(BaseSettings):
     is_production: bool = (
         os.getenv("ENVIRONMENT", "development").lower() == "production"
     )
+    
+    secret_key: str = Field(default="", alias="SECRET_KEY")
+    algorithm: str = Field(default="HS256", alias="ALGORITHM")
+    access_token_expire_minutes: int = Field(default=30, alias="ACCESS_TOKEN_EXPIRE_MINUTES")
 
     class Config:
         env_file = ".env"

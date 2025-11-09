@@ -1,6 +1,7 @@
 """
 Payments Router - FastAPI routes for manual payments management.
 Uses the unified Payment model from transactions module.
+Protected with role-based access control.
 """
 
 from typing import List, Optional
@@ -9,6 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.engine import get_db_util
 from app.core.response_interceptor import skip_interceptor
+from app.modules.users.auth import (
+    TokenData,
+    require_admin,
+    require_admin_or_staff,
+    require_admin_or_manager,
+    require_any_role,
+)
 from .service import PaymentsService
 from .models import SUGGESTED_PAYMENT_CATEGORIES, INCOME_CATEGORIES
 from .schemas import (
@@ -42,10 +50,12 @@ async def get_suggested_categories():
 
 @router.post("", response_model=ManualPaymentResponse, status_code=201)
 async def create_manual_payment(
-    create_dto: CreateManualPaymentDto, db: AsyncSession = Depends(get_db_util)
+    create_dto: CreateManualPaymentDto,
+    db: AsyncSession = Depends(get_db_util),
+    current_user: TokenData = Depends(require_admin_or_staff)
 ):
     """
-    Create a new payment entry.
+    Create a new payment entry. (Admin/Staff only)
 
     This endpoint supports TWO types of payments:
 
@@ -73,9 +83,10 @@ async def create_manual_payment(
 async def get_all_manual_payments(
     filters: FilterManualPaymentsDto = Depends(),
     db: AsyncSession = Depends(get_db_util),
+    current_user: TokenData = Depends(require_any_role)
 ):
     """
-    Get all payments with optional filters.
+    Get all payments with optional filters. (Requires authentication)
 
     By default, returns ALL payments (both manual and transaction-linked).
     Use `manual_only=true` to get only manual payments.
@@ -108,9 +119,10 @@ async def get_manual_payments_summary(
     from_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
     to_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
     db: AsyncSession = Depends(get_db_util),
+    current_user: TokenData = Depends(require_admin_or_manager)
 ):
     """
-    Get summary of manual payments with separate spends and earnings.
+    Get summary of manual payments with separate spends and earnings. (Admin/Manager only)
 
     Returns:
     - Total amount of all payments (spends + earnings)
@@ -139,9 +151,11 @@ async def get_manual_payments_summary(
 
 @router.get("/{payment_id}", response_model=ManualPaymentResponse)
 async def get_manual_payment_by_id(
-    payment_id: int, db: AsyncSession = Depends(get_db_util)
+    payment_id: int,
+    db: AsyncSession = Depends(get_db_util),
+    current_user: TokenData = Depends(require_any_role)
 ):
-    """Get payment by ID (supports both manual and transaction-linked payments)"""
+    """Get payment by ID (supports both manual and transaction-linked payments) - requires authentication"""
     payment = await PaymentsService.find_one(db, payment_id)
     return payment
 
@@ -151,9 +165,10 @@ async def update_manual_payment(
     payment_id: int,
     update_dto: UpdateManualPaymentDto,
     db: AsyncSession = Depends(get_db_util),
+    current_user: TokenData = Depends(require_admin_or_staff)
 ):
     """
-    Update payment information.
+    Update payment information. (Admin/Staff only)
 
     Supports updating both manual and transaction-linked payments.
     If you update a transaction-linked payment's amount or transaction_id,
@@ -166,10 +181,12 @@ async def update_manual_payment(
 @router.delete("/{payment_id}")
 @skip_interceptor
 async def delete_manual_payment(
-    payment_id: int, db: AsyncSession = Depends(get_db_util)
+    payment_id: int,
+    db: AsyncSession = Depends(get_db_util),
+    current_user: TokenData = Depends(require_admin)
 ):
     """
-    Soft delete payment.
+    Soft delete payment. (Admin only)
 
     If the payment is linked to a transaction, automatically updates
     the transaction's paid_amount and payment_status.

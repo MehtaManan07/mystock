@@ -32,3 +32,53 @@ class UserResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str
+
+    class Config:
+        from_attributes = True
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
+    class Config:
+        from_attributes = True
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+    class Config:
+        from_attributes = True
+
+
+class RegisterRequest(BaseModel):
+    username: str
+    password: str
+    name: str
+    role: Role
+    contact_info: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class RegisterResponse(BaseModel):
+    user: UserResponse
+    token: TokenResponse
+
+    class Config:
+        from_attributes = True
+
+
+class LoginResponse(BaseModel):
+    user: UserResponse
+    token: TokenResponse
+
+    class Config:
+        from_attributes = True

@@ -1,6 +1,7 @@
 """
 Transactions Router - FastAPI routes for sales and purchase transactions.
 Handles transaction creation, payment recording, and financial reporting.
+Protected with role-based access control.
 """
 
 from typing import List
@@ -8,6 +9,14 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.engine import get_db_util
+from app.modules.users.auth import (
+    get_current_user,
+    TokenData,
+    require_admin,
+    require_admin_or_manager,
+    require_admin_or_staff,
+    require_any_role,
+)
 from .service import TransactionsService
 from .invoice_service import InvoiceService
 from .schemas import (
@@ -28,9 +37,10 @@ router = APIRouter(prefix="/transactions", tags=["transactions"])
 async def create_sale(
     sale_data: CreateSaleDto,
     db: AsyncSession = Depends(get_db_util),
+    current_user: TokenData = Depends(require_admin_or_staff)
 ):
     """
-    Create a new sale transaction.
+    Create a new sale transaction. (Admin/Staff only)
 
     Automatically:
     - Generates transaction number (SALE-0001)
@@ -49,9 +59,10 @@ async def create_sale(
 async def create_purchase(
     purchase_data: CreatePurchaseDto,
     db: AsyncSession = Depends(get_db_util),
+    current_user: TokenData = Depends(require_admin_or_staff)
 ):
     """
-    Create a new purchase transaction.
+    Create a new purchase transaction. (Admin/Staff only)
 
     Automatically:
     - Generates transaction number (PUR-0001)
@@ -79,9 +90,10 @@ async def list_transactions(
         None, description="Search in transaction number or notes"
     ),
     db: AsyncSession = Depends(get_db_util),
+    current_user: TokenData = Depends(require_any_role)
 ):
     """
-    List all transactions with optional filters.
+    List all transactions with optional filters. (Requires authentication)
 
     Query parameters:
     - type: Filter by transaction type (sale, purchase)
@@ -127,9 +139,10 @@ async def list_transactions(
 async def get_transaction(
     transaction_id: int,
     db: AsyncSession = Depends(get_db_util),
+    current_user: TokenData = Depends(require_any_role)
 ):
     """
-    Get a single transaction by ID.
+    Get a single transaction by ID. (Requires authentication)
 
     Returns the complete transaction with:
     - Contact details
@@ -144,9 +157,10 @@ async def get_transaction(
 async def delete_transaction(
     transaction_id: int,
     db: AsyncSession = Depends(get_db_util),
+    current_user: TokenData = Depends(require_admin)
 ):
     """
-    Delete a transaction (soft delete).
+    Delete a transaction (soft delete). (Admin only)
 
     Automatically reverses:
     - Inventory changes (restores quantities)
@@ -166,9 +180,10 @@ async def record_payment(
     transaction_id: int,
     payment_data: CreatePaymentDto,
     db: AsyncSession = Depends(get_db_util),
+    current_user: TokenData = Depends(require_admin_or_staff)
 ):
     """
-    Record a payment against an existing transaction.
+    Record a payment against an existing transaction. (Admin/Staff only)
 
     Automatically:
     - Creates payment record
@@ -193,9 +208,10 @@ async def record_payment(
 async def get_transaction_payments(
     transaction_id: int,
     db: AsyncSession = Depends(get_db_util),
+    current_user: TokenData = Depends(require_any_role)
 ):
     """
-    Get all payments for a specific transaction.
+    Get all payments for a specific transaction. (Requires authentication)
 
     Returns list of payment records ordered by payment date.
     """
@@ -212,9 +228,10 @@ async def get_transaction_payments(
 async def get_invoice_metadata(
     transaction_id: int,
     db: AsyncSession = Depends(get_db_util),
+    current_user: TokenData = Depends(require_any_role)
 ):
     """
-    Get invoice metadata (URL, checksum, status) without full transaction data.
+    Get invoice metadata (URL, checksum, status) without full transaction data. (Requires authentication)
 
     Ultra-optimized endpoint:
     - Returns only invoice-related fields
@@ -235,9 +252,10 @@ async def generate_invoice(
         False, description="Force regenerate if already exists"
     ),
     db: AsyncSession = Depends(get_db_util),
+    current_user: TokenData = Depends(require_admin_or_staff)
 ):
     """
-    Manually generate/regenerate invoice PDF for a transaction.
+    Manually generate/regenerate invoice PDF for a transaction. (Admin/Staff only)
 
     By default, invoices are auto-generated on transaction creation.
     Use this endpoint to:
@@ -269,9 +287,10 @@ async def download_invoice(
         3600, ge=300, le=86400, description="URL validity in seconds (5min - 24h)"
     ),
     db: AsyncSession = Depends(get_db_util),
+    current_user: TokenData = Depends(require_any_role)
 ):
     """
-    Get presigned URL for direct invoice download from S3.
+    Get presigned URL for direct invoice download from S3. (Requires authentication)
 
     This is the MOST EFFICIENT way to serve invoices:
     - 0 bandwidth through our server

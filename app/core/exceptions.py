@@ -47,3 +47,9 @@ class ExternalServiceError(HTTPException):
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"{service_name} service error: {message}",
         )
+
+class UnauthorizedError(HTTPException):
+    """Raised when a user is not authorized to access a resource."""
+
+    def __init__(self, message: str):
+        super().__init__(status_code=status.HTTP_401_UNAUTHORIZED, detail=message)
