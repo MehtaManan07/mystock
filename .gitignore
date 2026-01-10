@@ -265,3 +265,4 @@ docker-compose.override.yml
 alembic.ini.backup
 alembic/versions/*.pyc
 ca.pem
+*.csv

@@ -1,4 +1,4 @@
-from sqlalchemy import Integer, ForeignKey, Index
+from sqlalchemy import Integer, ForeignKey, Index, inspect
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import TYPE_CHECKING
 
@@ -50,4 +50,11 @@ class ContainerProduct(BaseModel):
     product: Mapped["Product"] = relationship("Product", back_populates="containers")
 
     def __repr__(self) -> str:
-        return f"<ContainerProduct(id={self.id}, container_id={self.container_id}, product_id={self.product_id}, quantity={self.quantity})>"
+        # Handle detached instances gracefully to avoid DetachedInstanceError
+        try:
+            insp = inspect(self)
+            if insp.detached:
+                return f"<ContainerProduct(detached)>"
+            return f"<ContainerProduct(id={self.id}, container_id={self.container_id}, product_id={self.product_id}, quantity={self.quantity})>"
+        except Exception:
+            return f"<ContainerProduct(unknown state)>"

@@ -10,8 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import ValidationError
-from .models import ContainerProduct
-from .schemas import (
+from app.modules.container_products.models import ContainerProduct
+from app.modules.container_products.schemas import (
     CreateContainerProductDto,
     MapProductInputDto,
     MapProductOutputDto,
@@ -184,13 +184,16 @@ class ContainerProductService:
             container_id: Container ID
 
         Returns:
-            List of ContainerProduct with product relationship loaded
+            List of ContainerProduct with product and container relationships loaded
         """
         query = (
             select(ContainerProduct)
             .join(ContainerProduct.product)
             .where(ContainerProduct.container_id == container_id)
-            .options(selectinload(ContainerProduct.product))
+            .options(
+                selectinload(ContainerProduct.product),
+                selectinload(ContainerProduct.container),
+            )
             .order_by(Product.name.asc())
         )
 
@@ -209,13 +212,16 @@ class ContainerProductService:
             product_id: Product ID
 
         Returns:
-            List of ContainerProduct with container relationship loaded
+            List of ContainerProduct with container and product relationships loaded
         """
         query = (
             select(ContainerProduct)
             .join(ContainerProduct.container)
             .where(ContainerProduct.product_id == product_id)
-            .options(selectinload(ContainerProduct.container))
+            .options(
+                selectinload(ContainerProduct.container),
+                selectinload(ContainerProduct.product),
+            )
             .order_by(Container.name.asc())
         )
 

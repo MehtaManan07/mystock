@@ -9,12 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.engine import get_db_util
 from app.core.response_interceptor import skip_interceptor
-from app.modules.users.auth import (
-    TokenData,
-    require_admin,
-    require_admin_or_staff,
-    require_any_role,
-)
 from .service import ProductService
 from .schemas import (
     CreateProductDto,
@@ -30,10 +24,9 @@ router = APIRouter(prefix="/products", tags=["products"])
 @router.post("", response_model=ProductResponse)
 async def create_product(
     dto: CreateProductDto,
-    db: AsyncSession = Depends(get_db_util),
-    current_user: TokenData = Depends(require_admin_or_staff)
+    db: AsyncSession = Depends(get_db_util)
 ):
-    """Create a new product (Admin/Staff only)"""
+    """Create a new product"""
     product = await ProductService.create(db, dto)
     await db.commit()
     
@@ -53,10 +46,9 @@ async def create_product(
 @router.post("/bulk", response_model=List[ProductResponse])
 async def bulk_create_products(
     data: CreateProductBulkDto,
-    db: AsyncSession = Depends(get_db_util),
-    current_user: TokenData = Depends(require_admin_or_staff)
+    db: AsyncSession = Depends(get_db_util)
 ):
-    """Bulk create products (Admin/Staff only)"""
+    """Bulk create products"""
     products = await ProductService.bulk_create(db, data)
     await db.commit()
     
@@ -79,11 +71,10 @@ async def bulk_create_products(
 @router.get("", response_model=List[ProductResponse])
 async def get_all_products(
     search: Optional[str] = Query(None, description="Search by name, size, or packing"),
-    db: AsyncSession = Depends(get_db_util),
-    current_user: TokenData = Depends(require_any_role)
+    db: AsyncSession = Depends(get_db_util)
 ):
     """
-    Get all products with optional search filter. (Requires authentication)
+    Get all products with optional search filter.
     Returns products with totalQuantity computed from containers.
     """
     products = await ProductService.find_all(db, search)
@@ -93,10 +84,9 @@ async def get_all_products(
 @router.get("/{product_id}", response_model=ProductDetailResponse)
 async def get_product_by_id(
     product_id: int,
-    db: AsyncSession = Depends(get_db_util),
-    current_user: TokenData = Depends(require_any_role)
+    db: AsyncSession = Depends(get_db_util)
 ):
-    """Get product by ID with containers and logs (excludes soft-deleted products) - requires authentication"""
+    """Get product by ID with containers and logs (excludes soft-deleted products)"""
     product = await ProductService.find_one(db, product_id)
     return product
 
@@ -105,10 +95,9 @@ async def get_product_by_id(
 async def update_product(
     product_id: int,
     dto: UpdateProductDto,
-    db: AsyncSession = Depends(get_db_util),
-    current_user: TokenData = Depends(require_admin_or_staff)
+    db: AsyncSession = Depends(get_db_util)
 ):
-    """Update product information (Admin/Staff only)"""
+    """Update product information"""
     product = await ProductService.update(db, product_id, dto)
     await db.commit()
     
@@ -129,10 +118,9 @@ async def update_product(
 @skip_interceptor
 async def delete_product(
     product_id: int,
-    db: AsyncSession = Depends(get_db_util),
-    current_user: TokenData = Depends(require_admin)
+    db: AsyncSession = Depends(get_db_util)
 ):
-    """Soft delete product (Admin only)"""
+    """Soft delete product"""
     await ProductService.remove(db, product_id)
     await db.commit()
     return {"message": "Product deleted successfully"}
