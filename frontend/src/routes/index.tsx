@@ -16,6 +16,10 @@ import ContactsPage from '../features/contacts/ContactsPage';
 import ContactDetailPage from '../features/contacts/ContactDetailPage';
 import InventoryPage from '../features/inventory/InventoryPage';
 import InventoryLogsPage from '../features/inventory/InventoryLogsPage';
+import TransactionsPage from '../features/transactions/TransactionsPage';
+import TransactionDetailPage from '../features/transactions/TransactionDetailPage';
+import CreateSalePage from '../features/transactions/CreateSalePage';
+import CreatePurchasePage from '../features/transactions/CreatePurchasePage';
 
 // Placeholder component for pages not yet implemented
 const PlaceholderPage: React.FC<{ title: string }> = ({ title }) => (
@@ -72,9 +76,11 @@ export const AppRoutes: React.FC = () => {
         <Route path="/inventory" element={<InventoryPage />} />
         <Route path="/inventory/logs" element={<InventoryLogsPage />} />
         
-        {/* Transactions - Placeholder for now */}
-        <Route path="/transactions" element={<PlaceholderPage title="Transactions" />} />
-        <Route path="/transactions/:id" element={<PlaceholderPage title="Transaction Details" />} />
+        {/* Transactions */}
+        <Route path="/transactions" element={<TransactionsPage />} />
+        <Route path="/transactions/new-sale" element={<CreateSalePage />} />
+        <Route path="/transactions/new-purchase" element={<CreatePurchasePage />} />
+        <Route path="/transactions/:id" element={<TransactionDetailPage />} />
         
         {/* Payments - Placeholder for now */}
         <Route path="/payments" element={<PlaceholderPage title="Payments" />} />
