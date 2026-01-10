@@ -21,12 +21,14 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   ArrowBack as BackIcon,
+  Inventory as InventoryIcon,
 } from '@mui/icons-material';
 import { PageHeader } from '../../components/common/PageHeader';
 import { LoadingState } from '../../components/common/LoadingState';
 import { ErrorState } from '../../components/common/ErrorState';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { ContainerFormDialog } from './components/ContainerFormDialog';
+import { ManageProductsDialog } from './components/ManageProductsDialog';
 import { useContainer, useUpdateContainer, useDeleteContainer } from '../../hooks/useContainers';
 import type { CreateContainerDto, UpdateContainerDto } from '../../types';
 import { format } from 'date-fns';
@@ -39,6 +41,7 @@ export const ContainerDetailPage: React.FC = () => {
   // Dialog states
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [manageProductsDialogOpen, setManageProductsDialogOpen] = useState(false);
 
   // Data fetching
   const { data: container, isLoading, isError, refetch } = useContainer(containerId);
@@ -98,6 +101,11 @@ export const ContainerDetailPage: React.FC = () => {
         <Tooltip title="Back to Containers">
           <IconButton onClick={() => navigate('/containers')}>
             <BackIcon />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title="Manage Products">
+          <IconButton color="primary" onClick={() => setManageProductsDialogOpen(true)}>
+            <InventoryIcon />
           </IconButton>
         </Tooltip>
         <Tooltip title="Edit Container">
@@ -296,6 +304,16 @@ export const ContainerDetailPage: React.FC = () => {
         isLoading={deleteMutation.isPending}
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeleteDialogOpen(false)}
+      />
+
+      {/* Manage Products Dialog */}
+      <ManageProductsDialog
+        open={manageProductsDialogOpen}
+        containerId={containerId}
+        containerName={container.name}
+        currentProducts={container.products || []}
+        onClose={() => setManageProductsDialogOpen(false)}
+        onSuccess={() => refetch()}
       />
     </Box>
   );

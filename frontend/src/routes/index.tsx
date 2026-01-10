@@ -14,6 +14,8 @@ import ContainersPage from '../features/containers/ContainersPage';
 import ContainerDetailPage from '../features/containers/ContainerDetailPage';
 import ContactsPage from '../features/contacts/ContactsPage';
 import ContactDetailPage from '../features/contacts/ContactDetailPage';
+import InventoryPage from '../features/inventory/InventoryPage';
+import InventoryLogsPage from '../features/inventory/InventoryLogsPage';
 
 // Placeholder component for pages not yet implemented
 const PlaceholderPage: React.FC<{ title: string }> = ({ title }) => (
@@ -65,6 +67,10 @@ export const AppRoutes: React.FC = () => {
         {/* Contacts */}
         <Route path="/contacts" element={<ContactsPage />} />
         <Route path="/contacts/:id" element={<ContactDetailPage />} />
+        
+        {/* Inventory */}
+        <Route path="/inventory" element={<InventoryPage />} />
+        <Route path="/inventory/logs" element={<InventoryLogsPage />} />
         
         {/* Transactions - Placeholder for now */}
         <Route path="/transactions" element={<PlaceholderPage title="Transactions" />} />

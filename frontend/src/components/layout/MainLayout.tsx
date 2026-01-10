@@ -31,6 +31,7 @@ import {
   LightMode as LightModeIcon,
   Logout as LogoutIcon,
   Person as PersonIcon,
+  Inventory as InventoryIcon,
 } from '@mui/icons-material';
 import { useAuthStore } from '../../stores/authStore';
 import { useThemeStore } from '../../stores/themeStore';
@@ -48,6 +49,7 @@ const navItems: NavItem[] = [
   { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
   { text: 'Products', icon: <ProductIcon />, path: '/products' },
   { text: 'Containers', icon: <ContainerIcon />, path: '/containers' },
+  { text: 'Inventory', icon: <InventoryIcon />, path: '/inventory' },
   { text: 'Contacts', icon: <ContactIcon />, path: '/contacts' },
   { text: 'Transactions', icon: <TransactionIcon />, path: '/transactions' },
   { text: 'Payments', icon: <PaymentIcon />, path: '/payments' },

@@ -201,7 +201,12 @@ export const ProductDetailPage: React.FC = () => {
                     </TableHead>
                     <TableBody>
                       {product.containers.map((cp) => (
-                        <TableRow key={cp.container.id} hover>
+                        <TableRow
+                          key={cp.container.id}
+                          hover
+                          sx={{ cursor: 'pointer' }}
+                          onClick={() => navigate(`/containers/${cp.container.id}`)}
+                        >
                           <TableCell>
                             <Typography variant="body2" fontWeight={500}>
                               {cp.container.name}
@@ -249,7 +254,12 @@ export const ProductDetailPage: React.FC = () => {
                     </TableHead>
                     <TableBody>
                       {product.logs.slice(0, 10).map((log) => (
-                        <TableRow key={log.id} hover>
+                        <TableRow
+                          key={log.id}
+                          hover
+                          sx={{ cursor: log.container ? 'pointer' : 'default' }}
+                          onClick={() => log.container && navigate(`/containers/${log.container.id}`)}
+                        >
                           <TableCell>
                             <Chip
                               label={log.action}
@@ -264,7 +274,16 @@ export const ProductDetailPage: React.FC = () => {
                               variant="outlined"
                             />
                           </TableCell>
-                          <TableCell>{log.container?.name || '-'}</TableCell>
+                          <TableCell>
+                            {log.container ? (
+                              <Chip
+                                label={log.container.name}
+                                size="small"
+                                variant="outlined"
+                                color="primary"
+                              />
+                            ) : '-'}
+                          </TableCell>
                           <TableCell align="right">{log.quantity}</TableCell>
                           <TableCell>
                             <Typography variant="caption">
