@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic import Field, field_validator
 import os
 from pathlib import Path
 
@@ -7,17 +7,6 @@ from pathlib import Path
 class Config(BaseSettings):
     # PostgreSQL Database Configuration
     database_url: str = Field(default="", alias="DB_URL")
-    pg_password: str = Field(default="", alias="PG_PASSWORD")
-    pg_host: str = Field(default="", alias="PG_HOST")
-    pg_database: str = Field(default="", alias="PG_DATABASE")
-    pg_user: str = Field(default="", alias="PG_USER")
-    pg_port: int = Field(default=5432, alias="PG_PORT")
-    pg_ssl_mode: str = Field(default="require", alias="PG_SSL_MODE")
-    pg_ssl_cert_path: str = Field(
-        default=str(Path(__file__).parent.parent.parent / "ca.pem"),
-        alias="PG_SSL_CERT_PATH",
-    )
-    pg_ssl_verify: bool = Field(default=False, alias="PG_SSL_VERIFY")
 
     # JWT Configuration
     jwt_secret: str = Field(default="", alias="JWT_SECRET")
@@ -37,13 +26,16 @@ class Config(BaseSettings):
     redis_db: int = Field(default=0, alias="REDIS_DB")
     redis_decode_responses: bool = Field(default=True, alias="REDIS_DECODE_RESPONSES")
 
-    is_production: bool = (
-        os.getenv("ENVIRONMENT", "development").lower() == "production"
-    )
+    # Environment Configuration
+    environment: str = Field(default="development", alias="ENVIRONMENT")
     
     secret_key: str = Field(default="", alias="SECRET_KEY")
     algorithm: str = Field(default="HS256", alias="ALGORITHM")
     access_token_expire_minutes: int = Field(default=30, alias="ACCESS_TOKEN_EXPIRE_MINUTES")
+
+    @property
+    def is_production(self) -> bool:
+        return self.environment.lower() == "production"
 
     class Config:
         env_file = ".env"

@@ -264,3 +264,4 @@ docker-compose.override.yml
 # Keep alembic.ini and versions/ but ignore any potential backup files
 alembic.ini.backup
 alembic/versions/*.pyc
+ca.pem
