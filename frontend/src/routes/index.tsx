@@ -1,27 +1,19 @@
-import React, { Suspense, lazy } from 'react';
+import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { Box, CircularProgress } from '@mui/material';
+import { Box } from '@mui/material';
 import { AuthGuard, GuestGuard } from '../components/common/AuthGuard';
 import MainLayout from '../components/layout/MainLayout';
 
-// Lazy load pages for code splitting
-const LoginPage = lazy(() => import('../features/auth/LoginPage'));
-const RegisterPage = lazy(() => import('../features/auth/RegisterPage'));
-const DashboardPage = lazy(() => import('../features/dashboard/DashboardPage'));
-
-// Loading component for Suspense
-const PageLoader: React.FC = () => (
-  <Box
-    sx={{
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      minHeight: '100vh',
-    }}
-  >
-    <CircularProgress />
-  </Box>
-);
+// Direct imports instead of lazy loading for faster navigation
+import LoginPage from '../features/auth/LoginPage';
+import RegisterPage from '../features/auth/RegisterPage';
+import DashboardPage from '../features/dashboard/DashboardPage';
+import ProductsPage from '../features/products/ProductsPage';
+import ProductDetailPage from '../features/products/ProductDetailPage';
+import ContainersPage from '../features/containers/ContainersPage';
+import ContainerDetailPage from '../features/containers/ContainerDetailPage';
+import ContactsPage from '../features/contacts/ContactsPage';
+import ContactDetailPage from '../features/contacts/ContactDetailPage';
 
 // Placeholder component for pages not yet implemented
 const PlaceholderPage: React.FC<{ title: string }> = ({ title }) => (
@@ -33,54 +25,62 @@ const PlaceholderPage: React.FC<{ title: string }> = ({ title }) => (
 
 export const AppRoutes: React.FC = () => {
   return (
-    <Suspense fallback={<PageLoader />}>
-      <Routes>
-        {/* Public routes */}
-        <Route
-          path="/login"
-          element={
-            <GuestGuard>
-              <LoginPage />
-            </GuestGuard>
-          }
-        />
-        <Route
-          path="/register"
-          element={
-            <GuestGuard>
-              <RegisterPage />
-            </GuestGuard>
-          }
-        />
+    <Routes>
+      {/* Public routes */}
+      <Route
+        path="/login"
+        element={
+          <GuestGuard>
+            <LoginPage />
+          </GuestGuard>
+        }
+      />
+      <Route
+        path="/register"
+        element={
+          <GuestGuard>
+            <RegisterPage />
+          </GuestGuard>
+        }
+      />
 
-        {/* Protected routes */}
-        <Route
-          element={
-            <AuthGuard>
-              <MainLayout />
-            </AuthGuard>
-          }
-        >
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/products" element={<PlaceholderPage title="Products" />} />
-          <Route path="/products/:id" element={<PlaceholderPage title="Product Details" />} />
-          <Route path="/containers" element={<PlaceholderPage title="Containers" />} />
-          <Route path="/containers/:id" element={<PlaceholderPage title="Container Details" />} />
-          <Route path="/contacts" element={<PlaceholderPage title="Contacts" />} />
-          <Route path="/contacts/:id" element={<PlaceholderPage title="Contact Details" />} />
-          <Route path="/transactions" element={<PlaceholderPage title="Transactions" />} />
-          <Route path="/transactions/:id" element={<PlaceholderPage title="Transaction Details" />} />
-          <Route path="/payments" element={<PlaceholderPage title="Payments" />} />
-          <Route path="/payments/:id" element={<PlaceholderPage title="Payment Details" />} />
-        </Route>
+      {/* Protected routes */}
+      <Route
+        element={
+          <AuthGuard>
+            <MainLayout />
+          </AuthGuard>
+        }
+      >
+        <Route path="/dashboard" element={<DashboardPage />} />
+        
+        {/* Products */}
+        <Route path="/products" element={<ProductsPage />} />
+        <Route path="/products/:id" element={<ProductDetailPage />} />
+        
+        {/* Containers */}
+        <Route path="/containers" element={<ContainersPage />} />
+        <Route path="/containers/:id" element={<ContainerDetailPage />} />
+        
+        {/* Contacts */}
+        <Route path="/contacts" element={<ContactsPage />} />
+        <Route path="/contacts/:id" element={<ContactDetailPage />} />
+        
+        {/* Transactions - Placeholder for now */}
+        <Route path="/transactions" element={<PlaceholderPage title="Transactions" />} />
+        <Route path="/transactions/:id" element={<PlaceholderPage title="Transaction Details" />} />
+        
+        {/* Payments - Placeholder for now */}
+        <Route path="/payments" element={<PlaceholderPage title="Payments" />} />
+        <Route path="/payments/:id" element={<PlaceholderPage title="Payment Details" />} />
+      </Route>
 
-        {/* Redirect root to dashboard */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      {/* Redirect root to dashboard */}
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
-        {/* 404 - redirect to dashboard */}
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
-    </Suspense>
+      {/* 404 - redirect to dashboard */}
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+    </Routes>
   );
 };
 
