@@ -101,8 +101,9 @@ endif
 	@zsh -i -c 'pgit commit -m "$(msg)"'
 
 
-start-client:
-	cd frontend && npm run dev
+# Frontend moved to ~/code/mystock-ui
+# start-client:
+# 	cd ~/code/mystock-ui && npm run dev
 
 # =============================================================================
 # SQLite Management Commands

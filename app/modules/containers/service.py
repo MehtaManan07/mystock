@@ -3,8 +3,9 @@ ContainerService - FastAPI equivalent of NestJS ContainerService.
 Optimized queries with eager loading for relationships.
 """
 
+import re
 from typing import List, Optional
-from sqlalchemy import select, func, cast, Integer, case, or_
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -13,6 +14,13 @@ from .models import ContainerType, Container
 from .schemas import CreateContainerDto, CreateContainerBulkDto, UpdateContainerDto
 from app.modules.container_products.models import ContainerProduct
 from app.modules.inventory_logs.models import InventoryLog
+
+
+def extract_number_from_name(name: str) -> int:
+    """Extract numeric value from container name for sorting."""
+    # Extract all digits from the name
+    digits = re.sub(r'\D', '', name)
+    return int(digits) if digits else 0
 
 
 class ContainerService:
@@ -80,8 +88,7 @@ class ContainerService:
         Optimized: Uses selectinload to prevent N+1 queries.
 
         Sorting: Extracts numeric values from container names and sorts DESC.
-        Equivalent to PostgreSQL:
-        COALESCE(CAST(NULLIF(regexp_replace(container.name, '\\D', '', 'g'), '') AS INTEGER), 0) DESC
+        Done in Python for SQLite compatibility.
 
         Args:
             search: Optional search string to filter by name
@@ -101,21 +108,12 @@ class ContainerService:
             search_pattern = f"%{search}%"
             query = query.where(Container.name.ilike(search_pattern))
 
-        # Complex ordering: Extract numbers from name and sort DESC
-        # This replicates the PostgreSQL regex logic
-        # We use func.regexp_replace to remove non-digits, then cast to integer
-        # COALESCE ensures we get 0 for names with no numbers
-        numeric_part = func.coalesce(
-            cast(
-                func.nullif(func.regexp_replace(Container.name, r"\D", "", "g"), ""),
-                Integer,
-            ),
-            0,
-        )
-        query = query.order_by(numeric_part.desc())
-
         result = await db.execute(query)
-        containers = result.scalars().all()
+        containers = list(result.scalars().all())
+        
+        # Sort in Python: Extract numbers from name and sort DESC
+        # This is SQLite-compatible (no regexp_replace function needed)
+        containers.sort(key=lambda c: extract_number_from_name(c.name), reverse=True)
 
         # Map to response format with productCount
         return [

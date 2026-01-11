@@ -43,6 +43,20 @@ async def lifespan(app: FastAPI):
     """
     logger.info("Starting MyStock API...")
     
+    # Create daily backup on startup (SQLite only)
+    if config.is_sqlite:
+        logger.info(f"Using SQLite database: {config.sqlite_db_path}")
+        try:
+            backup_path = await create_daily_backup()
+            if backup_path:
+                logger.info(f"Startup backup created: {backup_path}")
+        except Exception as e:
+            logger.warning(f"Startup backup failed (non-fatal): {e}")
+    else:
+        logger.info("Using PostgreSQL database")
+    
+    yield  # App runs here
+    
     # Cleanup on shutdown
     logger.info("Shutting down MyStock API...")
 
