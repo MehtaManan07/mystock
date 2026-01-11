@@ -16,6 +16,8 @@ interface PageHeaderProps {
   actionIcon?: React.ReactNode;
   onAction?: () => void;
   actionDisabled?: boolean;
+  /** Custom action element - takes precedence over actionLabel/onAction */
+  action?: React.ReactNode;
 }
 
 export const PageHeader: React.FC<PageHeaderProps> = ({
@@ -26,6 +28,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   actionIcon = <AddIcon />,
   onAction,
   actionDisabled = false,
+  action,
 }) => {
   return (
     <Box sx={{ mb: 4 }}>
@@ -75,15 +78,19 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
           )}
         </Box>
 
-        {actionLabel && onAction && (
-          <Button
-            variant="contained"
-            startIcon={actionIcon}
-            onClick={onAction}
-            disabled={actionDisabled}
-          >
-            {actionLabel}
-          </Button>
+        {action ? (
+          action
+        ) : (
+          actionLabel && onAction && (
+            <Button
+              variant="contained"
+              startIcon={actionIcon}
+              onClick={onAction}
+              disabled={actionDisabled}
+            >
+              {actionLabel}
+            </Button>
+          )
         )}
       </Box>
     </Box>

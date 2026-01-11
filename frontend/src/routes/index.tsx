@@ -1,6 +1,5 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { Box } from '@mui/material';
 import { AuthGuard, GuestGuard } from '../components/common/AuthGuard';
 import MainLayout from '../components/layout/MainLayout';
 
@@ -20,14 +19,7 @@ import TransactionsPage from '../features/transactions/TransactionsPage';
 import TransactionDetailPage from '../features/transactions/TransactionDetailPage';
 import CreateSalePage from '../features/transactions/CreateSalePage';
 import CreatePurchasePage from '../features/transactions/CreatePurchasePage';
-
-// Placeholder component for pages not yet implemented
-const PlaceholderPage: React.FC<{ title: string }> = ({ title }) => (
-  <Box sx={{ p: 3 }}>
-    <h1>{title}</h1>
-    <p>This page is coming soon.</p>
-  </Box>
-);
+import PaymentsPage from '../features/payments/PaymentsPage';
 
 export const AppRoutes: React.FC = () => {
   return (
@@ -82,9 +74,8 @@ export const AppRoutes: React.FC = () => {
         <Route path="/transactions/new-purchase" element={<CreatePurchasePage />} />
         <Route path="/transactions/:id" element={<TransactionDetailPage />} />
         
-        {/* Payments - Placeholder for now */}
-        <Route path="/payments" element={<PlaceholderPage title="Payments" />} />
-        <Route path="/payments/:id" element={<PlaceholderPage title="Payment Details" />} />
+        {/* Payments */}
+        <Route path="/payments" element={<PaymentsPage />} />
       </Route>
 
       {/* Redirect root to dashboard */}
