@@ -31,7 +31,8 @@ class Config(BaseSettings):
     
     secret_key: str = Field(default="", alias="SECRET_KEY")
     algorithm: str = Field(default="HS256", alias="ALGORITHM")
-    access_token_expire_minutes: int = Field(default=30, alias="ACCESS_TOKEN_EXPIRE_MINUTES")
+    # Token expiration: 7 days for development, override in .env for production
+    access_token_expire_minutes: int = Field(default=10080, alias="ACCESS_TOKEN_EXPIRE_MINUTES")
 
     @property
     def is_production(self) -> bool:

@@ -85,3 +85,7 @@ ifndef msg
 endif
 	@zsh -i -c 'pgit add .'
 	@zsh -i -c 'pgit commit -m "$(msg)"'
+
+
+start-client:
+	cd frontend && npm run dev
