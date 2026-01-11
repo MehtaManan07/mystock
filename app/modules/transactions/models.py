@@ -63,7 +63,7 @@ class Transaction(BaseModel):
     transaction_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
 
     type: Mapped[TransactionType] = mapped_column(
-        SQLEnum(TransactionType, name="transaction_type_enum"),
+        SQLEnum(TransactionType, name="transaction_type_enum", native_enum=False),
         nullable=False,
     )
 
@@ -108,7 +108,7 @@ class Transaction(BaseModel):
     )
 
     payment_status: Mapped[PaymentStatus] = mapped_column(
-        SQLEnum(PaymentStatus, name="payment_status_enum"),
+        SQLEnum(PaymentStatus, name="payment_status_enum", native_enum=False),
         nullable=False,
         default=PaymentStatus.unpaid,
         server_default=PaymentStatus.unpaid.value,

@@ -8,10 +8,24 @@ help:
 	@echo "  make run             - Run the FastAPI server"
 	@echo "  make migrate         - Apply Alembic migrations"
 	@echo "  make makemigration msg='message' - Create migration"
+	@echo "  make downgrade       - Rollback one migration"
+	@echo "  make dbversion       - Show current migration version"
 	@echo "  make expose          - Expose the FastAPI server to the internet"
-	@echo "  make down            - Stop the FastAPI server"
 	@echo "  make module name='module_name' - Create a new module with standard structure"
 	@echo "  make celery          - Run Celery worker for scheduled tasks"
+	@echo ""
+	@echo "SQLite Management:"
+	@echo "  make backup          - Create a timestamped SQLite backup"
+	@echo "  make restore file='path' - Restore from a backup file"
+	@echo "  make db-shell        - Open SQLite CLI"
+	@echo "  make db-vacuum       - Optimize SQLite database"
+	@echo "  make db-info         - Show database file info"
+	@echo "  make migrate-fresh   - Reset DB and run migrations (DESTRUCTIVE!)"
+	@echo ""
+	@echo "Data Migration (PostgreSQL to SQLite):"
+	@echo "  make migrate-from-pg-dry  - Test migration without changes"
+	@echo "  make migrate-from-pg      - Migrate data from PostgreSQL"
+	@echo "  make migrate-from-pg-clear - Clear SQLite and migrate from PostgreSQL"
 
 
 # Configs
@@ -89,3 +103,143 @@ endif
 
 start-client:
 	cd frontend && npm run dev
+
+# =============================================================================
+# SQLite Management Commands
+# =============================================================================
+
+# Database paths
+DB_FILE=data/inventory.db
+BACKUP_DIR=backups
+
+# Create a timestamped backup using SQLite backup API
+backup:
+	@mkdir -p $(BACKUP_DIR)
+	@if [ -f $(DB_FILE) ]; then \
+		TIMESTAMP=$$(date +%Y%m%d_%H%M%S); \
+		BACKUP_FILE=$(BACKUP_DIR)/inventory_backup_$${TIMESTAMP}.db; \
+		echo "Creating backup: $${BACKUP_FILE}"; \
+		sqlite3 $(DB_FILE) ".backup $${BACKUP_FILE}"; \
+		echo "Backup created successfully!"; \
+		ls -lh $${BACKUP_FILE}; \
+	else \
+		echo "Database not found: $(DB_FILE)"; \
+		exit 1; \
+	fi
+
+# Restore from a backup file
+restore:
+ifndef file
+	$(error You must provide a backup file using file="path/to/backup.db")
+endif
+	@if [ ! -f $(file) ]; then \
+		echo "Backup file not found: $(file)"; \
+		exit 1; \
+	fi
+	@if [ -f $(DB_FILE) ]; then \
+		echo "Creating pre-restore backup..."; \
+		cp $(DB_FILE) $(DB_FILE).pre_restore; \
+	fi
+	@echo "Restoring from $(file)..."
+	@sqlite3 $(file) ".backup $(DB_FILE)"
+	@rm -f $(DB_FILE)-wal $(DB_FILE)-shm
+	@echo "Restore complete!"
+
+# Open SQLite CLI for the database
+db-shell:
+	@if [ -f $(DB_FILE) ]; then \
+		sqlite3 $(DB_FILE); \
+	else \
+		echo "Database not found: $(DB_FILE)"; \
+		echo "Run 'make migrate' first to create the database."; \
+		exit 1; \
+	fi
+
+# Optimize the database (reclaim space, rebuild indexes)
+db-vacuum:
+	@if [ -f $(DB_FILE) ]; then \
+		echo "Running VACUUM on database..."; \
+		sqlite3 $(DB_FILE) "VACUUM;"; \
+		echo "Running ANALYZE for query optimization..."; \
+		sqlite3 $(DB_FILE) "ANALYZE;"; \
+		echo "Database optimized!"; \
+		ls -lh $(DB_FILE); \
+	else \
+		echo "Database not found: $(DB_FILE)"; \
+		exit 1; \
+	fi
+
+# Show database info
+db-info:
+	@echo "=== Database Info ==="
+	@if [ -f $(DB_FILE) ]; then \
+		echo "File: $(DB_FILE)"; \
+		ls -lh $(DB_FILE); \
+		echo ""; \
+		echo "=== PRAGMA Settings ==="; \
+		sqlite3 $(DB_FILE) "PRAGMA journal_mode; PRAGMA foreign_keys; PRAGMA busy_timeout;"; \
+		echo ""; \
+		echo "=== Table Row Counts ==="; \
+		sqlite3 $(DB_FILE) "SELECT name, (SELECT COUNT(*) FROM \"\" || name || \"\") as count FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'alembic_version';"; \
+	else \
+		echo "Database not found: $(DB_FILE)"; \
+	fi
+	@echo ""
+	@echo "=== WAL Files ==="
+	@ls -lh $(DB_FILE)-wal $(DB_FILE)-shm 2>/dev/null || echo "No WAL files present"
+
+# Reset database and run migrations (DESTRUCTIVE!)
+migrate-fresh:
+	@echo "WARNING: This will DELETE the database and all data!"
+	@echo "Press Ctrl+C within 5 seconds to cancel..."
+	@sleep 5
+	@rm -f $(DB_FILE) $(DB_FILE)-wal $(DB_FILE)-shm
+	@mkdir -p data
+	@echo "Running fresh migrations..."
+	$(ALEMBIC) -c $(ALEMBIC_CONFIG) upgrade head
+	@echo "Fresh database created!"
+
+# List available backups
+backup-list:
+	@echo "=== Available Backups ==="
+	@ls -lht $(BACKUP_DIR)/*.db 2>/dev/null || echo "No backups found in $(BACKUP_DIR)/"
+
+# Clean old backups (keep last 7)
+backup-clean:
+	@echo "Cleaning old backups (keeping last 7)..."
+	@cd $(BACKUP_DIR) && ls -t *.db 2>/dev/null | tail -n +8 | xargs -r rm -v
+	@echo "Done!"
+
+# =============================================================================
+# Data Migration Commands
+# =============================================================================
+
+# Migrate data from PostgreSQL to SQLite (dry run first!)
+migrate-from-pg-dry:
+	@echo "Running PostgreSQL to SQLite migration (DRY RUN)..."
+	@echo "This will NOT modify the SQLite database."
+	python scripts/migrate_pg_to_sqlite.py --dry-run
+
+# Migrate data from PostgreSQL to SQLite (actual migration)
+migrate-from-pg:
+ifndef DB_URL
+	$(error DB_URL must be set to your PostgreSQL connection string)
+endif
+	@echo "WARNING: This will migrate all data from PostgreSQL to SQLite!"
+	@echo "Make sure you have:"
+	@echo "  1. Run 'make migrate' to create SQLite schema"
+	@echo "  2. Backed up your PostgreSQL database"
+	@echo ""
+	@echo "Press Ctrl+C within 5 seconds to cancel..."
+	@sleep 5
+	python scripts/migrate_pg_to_sqlite.py
+
+# Migrate with clearing existing SQLite data
+migrate-from-pg-clear:
+ifndef DB_URL
+	$(error DB_URL must be set to your PostgreSQL connection string)
+endif
+	@echo "WARNING: This will DELETE existing SQLite data and migrate from PostgreSQL!"
+	@echo "Press Ctrl+C within 5 seconds to cancel..."
+	@sleep 5
+	python scripts/migrate_pg_to_sqlite.py --clear

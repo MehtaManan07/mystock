@@ -111,7 +111,7 @@ class Payment(BaseModel):
     )
 
     payment_method: Mapped[PaymentMethod] = mapped_column(
-        SQLEnum(PaymentMethod, name="payment_method_enum"),
+        SQLEnum(PaymentMethod, name="payment_method_enum", native_enum=False),
         nullable=False,
     )
 

@@ -29,7 +29,7 @@ class Container(BaseModel):
     )
 
     type: Mapped[ContainerType] = mapped_column(
-        SQLEnum(ContainerType, name="container_type_enum"), nullable=False
+        SQLEnum(ContainerType, name="container_type_enum", native_enum=False), nullable=False
     )
 
     # Relationships

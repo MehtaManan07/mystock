@@ -240,6 +240,18 @@ $RECYCLE.BIN/
 *.db
 *.sqlite
 *.sqlite3
+*.db-wal
+*.db-shm
+
+# SQLite data directory (keep structure, ignore contents)
+data/*.db
+data/*.db-wal
+data/*.db-shm
+!data/.gitkeep
+
+# Backup directory (keep structure, ignore contents)
+backups/*.db
+!backups/.gitkeep
 
 # Log files
 *.log

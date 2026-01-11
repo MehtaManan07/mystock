@@ -40,6 +40,7 @@ class User(BaseModel):
         SQLEnum(
             Role,
             name="users_role_enum",
+            native_enum=False,
         ),
         nullable=False,
         default=Role.JOBBER,
