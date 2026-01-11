@@ -28,14 +28,18 @@ class ContainerProductService:
     """
 
     @staticmethod
-    async def _get_locked_container_products(
+    async def _get_container_products(
         db: AsyncSession,
         container_id: int,
         product_ids: List[int],
     ) -> Dict[str, ContainerProduct]:
         """
-        Get container products with pessimistic write lock.
-        This ensures no concurrent modifications during transaction.
+        Get container products for update within a transaction.
+        
+        Concurrency handling:
+        - SQLite with WAL mode handles concurrent access at the database level
+        - The transaction isolation ensures consistency
+        - busy_timeout prevents immediate "database is locked" errors
 
         Args:
             db: Database session (within transaction)
@@ -45,7 +49,9 @@ class ContainerProductService:
         Returns:
             Dictionary mapping "containerId-productId" to ContainerProduct
         """
-        # Query with pessimistic write lock (FOR UPDATE)
+        # Query existing container products
+        # Note: SQLite doesn't support FOR UPDATE, but WAL mode + transaction
+        # isolation provides safe concurrent access for our 5-10 user load
         query = (
             select(ContainerProduct)
             .where(
@@ -56,7 +62,6 @@ class ContainerProductService:
                 selectinload(ContainerProduct.container),
                 selectinload(ContainerProduct.product),
             )
-            .with_for_update()  # This is the pessimistic_write lock
         )
 
         result = await db.execute(query)
@@ -70,11 +75,14 @@ class ContainerProductService:
         db: AsyncSession, payload: CreateContainerProductDto
     ) -> None:
         """
-        Set products in a container with transaction and locking.
+        Set products in a container with transaction safety.
         This is the main business logic method that:
-        - Locks existing records to prevent race conditions
+        - Fetches existing records within a transaction
         - Calculates deltas and creates audit logs
         - Updates/creates/soft-deletes container-product relationships
+        
+        Concurrency: SQLite WAL mode + transaction isolation handles
+        concurrent access safely for our expected 5-10 user load.
 
         Args:
             db: Database session
@@ -89,8 +97,8 @@ class ContainerProductService:
         # Extract product IDs
         product_ids = [item.productId for item in items]
 
-        # Get existing records with pessimistic lock
-        existing_map = await ContainerProductService._get_locked_container_products(
+        # Get existing records within transaction
+        existing_map = await ContainerProductService._get_container_products(
             db, container_id, product_ids
         )
 

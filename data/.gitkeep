@@ -1,0 +1,3 @@
+# This directory stores the SQLite database.
+# The actual .db files are gitignored.
+# Run `make migrate` to create the database.

@@ -96,15 +96,12 @@ class ProductService:
         )
 
         # Add search filter if provided
+        # Split search into words and require ALL words to match in name field
         if search:
-            search_pattern = f"%{search}%"
-            query = query.where(
-                or_(
-                    Product.name.ilike(search_pattern),
-                    Product.size.ilike(search_pattern),
-                    Product.packing.ilike(search_pattern),
-                )
-            )
+            words = search.strip().split()
+            for word in words:
+                word_pattern = f"%{word}%"
+                query = query.where(Product.name.ilike(word_pattern))
 
         # Order by created_at DESC
         query = query.order_by(Product.created_at.desc())

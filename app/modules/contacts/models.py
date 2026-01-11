@@ -39,6 +39,7 @@ class Contact(BaseModel):
         SQLEnum(
             ContactType,
             name="contacts_type_enum",
+            native_enum=False,
         ),
         nullable=False,
         default=ContactType.customer,
