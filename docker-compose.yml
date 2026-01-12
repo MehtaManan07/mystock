@@ -1,0 +1,58 @@
+# =============================================================================
+# MyStock FastAPI Application - Docker Compose Configuration
+# =============================================================================
+# Usage:
+#   docker-compose up -d --build    # Build and start in background
+#   docker-compose logs -f          # View logs
+#   docker-compose down              # Stop containers
+#   docker-compose down -v           # Stop and remove volumes (DESTRUCTIVE!)
+
+services:
+  mystock-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mystock-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    
+    # Environment variables
+    environment:
+      # Database - SQLite path inside container
+      - DB_URL=sqlite+aiosqlite:////app/data/inventory.db
+      # Environment
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      # JWT/Auth (set these in .env file)
+      - JWT_SECRET=${JWT_SECRET:-changeme-in-production}
+      - SECRET_KEY=${SECRET_KEY:-changeme-in-production}
+      - ALGORITHM=${ALGORITHM:-HS256}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-10080}
+      # Backup configuration
+      - BACKUP_DIR=/app/backups
+      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-7}
+      # AWS S3 (optional - for invoice storage)
+      - MY_AWS_REGION=${MY_AWS_REGION:-}
+      - MY_AWS_ACCESS_KEY_ID=${MY_AWS_ACCESS_KEY_ID:-}
+      - MY_AWS_SECRET_ACCESS_KEY=${MY_AWS_SECRET_ACCESS_KEY:-}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
+      - S3_INVOICE_PREFIX=${S3_INVOICE_PREFIX:-invoices/}
+      # Redis (optional)
+      - REDIS_HOST=${REDIS_HOST:-localhost}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_SSL=${REDIS_SSL:-false}
+    
+    # Persist data across container restarts
+    # Using bind mounts to use LOCAL data folder (keeps existing database!)
+    volumes:
+      - ./data:/app/data
+      - ./backups:/app/backups
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/demo')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
