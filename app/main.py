@@ -79,7 +79,9 @@ origins = [
     "http://localhost",
     "http://localhost:5173",
     "http://mayuragency.surge.sh",
-    "https://mystockapp.duckdns.org",  # production
+    "https://mystockapp.duckdns.org",
+    "https://kraftculture.surge.sh",  # production frontend
+    "https://adminstock.duckdns.org",  # production API (for same-origin)
 ]
 
 app.add_middleware(
