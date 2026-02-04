@@ -4,7 +4,7 @@ set -e
 APP_NAME="mystock"
 APP_DIR="/home/manmehta/app"
 VENV_DIR="$APP_DIR/venv"
-SERVICE_NAME="mystock"
+SERVICE_NAME="fastapi"
 GIT_BRANCH="main"
 PYTHON_BIN="python3"
 
