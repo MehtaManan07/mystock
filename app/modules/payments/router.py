@@ -33,19 +33,31 @@ router = APIRouter(prefix="/payments", tags=["payments"])
 
 
 @router.get("/suggested-categories", response_model=SuggestedCategoriesResponse)
-async def get_suggested_categories():
+async def get_suggested_categories(
+    db: AsyncSession = Depends(get_db_util),
+):
     """
     Get suggested payment categories.
 
     Returns a list of commonly used payment categories that users can choose from.
+    This includes both hardcoded suggestions AND user-created custom categories.
     Users are NOT restricted to these categories - they can create their own custom categories.
-    This is just a helpful suggestion list for the frontend.
 
     Returns two lists: income and expense categories.
     """
-    income = sorted([c for c in SUGGESTED_PAYMENT_CATEGORIES if c in INCOME_CATEGORIES])
-    expense = sorted([c for c in SUGGESTED_PAYMENT_CATEGORIES if c not in INCOME_CATEGORIES])
-    return SuggestedCategoriesResponse(income_categories=income, expense_categories=expense)
+    # Start with hardcoded suggestions
+    income = set(c for c in SUGGESTED_PAYMENT_CATEGORIES if c in INCOME_CATEGORIES)
+    expense = set(c for c in SUGGESTED_PAYMENT_CATEGORIES if c not in INCOME_CATEGORIES)
+    
+    # Fetch user-created categories from the database and merge
+    user_categories = await PaymentsService.get_distinct_categories(db)
+    income.update(user_categories.get('income', []))
+    expense.update(user_categories.get('expense', []))
+    
+    return SuggestedCategoriesResponse(
+        income_categories=sorted(income),
+        expense_categories=sorted(expense)
+    )
 
 
 @router.post("", response_model=ManualPaymentResponse, status_code=201)
@@ -101,7 +113,7 @@ async def get_all_manual_payments(
     - to_date: Filter to this date (YYYY-MM-DD)
     - min_amount: Minimum amount
     - max_amount: Maximum amount
-    - search: Search in description or notes
+    - search: Search in description
 
     Examples:
     - GET /payments - Get all payments

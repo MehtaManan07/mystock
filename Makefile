@@ -15,8 +15,6 @@ help:
 	@echo "  make celery          - Run Celery worker for scheduled tasks"
 	@echo ""
 	@echo "SQLite Management:"
-	@echo "  make backup          - Create a timestamped SQLite backup"
-	@echo "  make restore file='path' - Restore from a backup file"
 	@echo "  make db-shell        - Open SQLite CLI"
 	@echo "  make db-vacuum       - Optimize SQLite database"
 	@echo "  make db-info         - Show database file info"
@@ -111,40 +109,6 @@ endif
 
 # Database paths
 DB_FILE=data/inventory.db
-BACKUP_DIR=backups
-
-# Create a timestamped backup using SQLite backup API
-backup:
-	@mkdir -p $(BACKUP_DIR)
-	@if [ -f $(DB_FILE) ]; then \
-		TIMESTAMP=$$(date +%Y%m%d_%H%M%S); \
-		BACKUP_FILE=$(BACKUP_DIR)/inventory_backup_$${TIMESTAMP}.db; \
-		echo "Creating backup: $${BACKUP_FILE}"; \
-		sqlite3 $(DB_FILE) ".backup $${BACKUP_FILE}"; \
-		echo "Backup created successfully!"; \
-		ls -lh $${BACKUP_FILE}; \
-	else \
-		echo "Database not found: $(DB_FILE)"; \
-		exit 1; \
-	fi
-
-# Restore from a backup file
-restore:
-ifndef file
-	$(error You must provide a backup file using file="path/to/backup.db")
-endif
-	@if [ ! -f $(file) ]; then \
-		echo "Backup file not found: $(file)"; \
-		exit 1; \
-	fi
-	@if [ -f $(DB_FILE) ]; then \
-		echo "Creating pre-restore backup..."; \
-		cp $(DB_FILE) $(DB_FILE).pre_restore; \
-	fi
-	@echo "Restoring from $(file)..."
-	@sqlite3 $(file) ".backup $(DB_FILE)"
-	@rm -f $(DB_FILE)-wal $(DB_FILE)-shm
-	@echo "Restore complete!"
 
 # Open SQLite CLI for the database
 db-shell:
@@ -199,17 +163,6 @@ migrate-fresh:
 	@echo "Running fresh migrations..."
 	$(ALEMBIC) -c $(ALEMBIC_CONFIG) upgrade head
 	@echo "Fresh database created!"
-
-# List available backups
-backup-list:
-	@echo "=== Available Backups ==="
-	@ls -lht $(BACKUP_DIR)/*.db 2>/dev/null || echo "No backups found in $(BACKUP_DIR)/"
-
-# Clean old backups (keep last 7)
-backup-clean:
-	@echo "Cleaning old backups (keeping last 7)..."
-	@cd $(BACKUP_DIR) && ls -t *.db 2>/dev/null | tail -n +8 | xargs -r rm -v
-	@echo "Done!"
 
 # =============================================================================
 # Data Migration Commands

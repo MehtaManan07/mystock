@@ -20,7 +20,7 @@ class Config(BaseSettings):
     # JWT Configuration
     jwt_secret: str = Field(default="", alias="JWT_SECRET")
 
-    # AWS Configuration
+    # AWS Configuration (legacy, for S3)
     aws_region: str = Field(default="", alias="MY_AWS_REGION")
     aws_access_key_id: str = Field(default="", alias="MY_AWS_ACCESS_KEY_ID")
     aws_secret_access_key: str = Field(default="", alias="MY_AWS_SECRET_ACCESS_KEY")
@@ -42,13 +42,6 @@ class Config(BaseSettings):
     algorithm: str = Field(default="HS256", alias="ALGORITHM")
     # Token expiration: 7 days for development, override in .env for production
     access_token_expire_minutes: int = Field(default=10080, alias="ACCESS_TOKEN_EXPIRE_MINUTES")
-
-    # Backup Configuration
-    backup_dir: str = Field(
-        default=str(PROJECT_ROOT / "backups"),
-        alias="BACKUP_DIR"
-    )
-    backup_retention_days: int = Field(default=7, alias="BACKUP_RETENTION_DAYS")
 
     @property
     def is_production(self) -> bool:

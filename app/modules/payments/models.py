@@ -5,7 +5,6 @@ from sqlalchemy import (
     String,
     Date,
     Numeric,
-    Text,
     ForeignKey,
     Enum as SQLEnum,
     Index,
@@ -134,8 +133,6 @@ class Payment(BaseModel):
     reference_number: Mapped[Optional[str]] = mapped_column(
         String(100), nullable=True, default=None
     )
-
-    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default=None)
 
     # Relationships
     transaction: Mapped[Optional["Transaction"]] = relationship(

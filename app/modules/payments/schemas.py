@@ -36,7 +36,6 @@ class CreateManualPaymentDto(BaseModel):
     reference_number: Optional[str] = Field(
         None, max_length=100, description="Payment reference number"
     )
-    notes: Optional[str] = Field(None, max_length=1000, description="Additional notes")
 
     class Config:
         from_attributes = True
@@ -66,7 +65,6 @@ class UpdateManualPaymentDto(BaseModel):
     reference_number: Optional[str] = Field(
         None, max_length=100, description="Payment reference number"
     )
-    notes: Optional[str] = Field(None, max_length=1000, description="Additional notes")
 
     class Config:
         from_attributes = True
@@ -89,7 +87,7 @@ class FilterManualPaymentsDto(BaseModel):
     from_date: Optional[date] = Field(None, description="Filter from this date")
     to_date: Optional[date] = Field(None, description="Filter to this date")
     search: Optional[str] = Field(
-        None, max_length=100, description="Search in description or notes"
+        None, max_length=100, description="Search in description"
     )
     min_amount: Optional[Decimal] = Field(None, ge=0, description="Minimum amount")
     max_amount: Optional[Decimal] = Field(None, ge=0, description="Maximum amount")
@@ -142,7 +140,6 @@ class ManualPaymentResponse(BaseModel):
     transaction: Optional[TransactionInPaymentResponse] = None
     description: Optional[str] = None
     reference_number: Optional[str] = None
-    notes: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     deleted_at: Optional[datetime] = None

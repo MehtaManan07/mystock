@@ -178,7 +178,6 @@ class PaymentsService:
             if filters.search:
                 query = query.where(
                     Payment.description.ilike(f"%{filters.search}%")
-                    | Payment.notes.ilike(f"%{filters.search}%")
                 )
 
         # Order by payment date descending (most recent first)
@@ -464,3 +463,38 @@ class PaymentsService:
             payment_count=payment_count,
             category_breakdown=category_breakdown,
         )
+
+    @staticmethod
+    async def get_distinct_categories(db: AsyncSession) -> dict[str, list[str]]:
+        """
+        Get all distinct categories from existing payments.
+        Returns a dict with 'income' and 'expense' keys, each containing a list of categories.
+        
+        This allows us to show user-created custom categories in the dropdown.
+        """
+        query = select(
+            Payment.type,
+            Payment.category
+        ).where(
+            Payment.deleted_at.is_(None),
+            Payment.category.isnot(None),
+            Payment.category != ''
+        ).distinct()
+
+        result = await db.execute(query)
+        rows = result.all()
+
+        income_categories: set[str] = set()
+        expense_categories: set[str] = set()
+
+        for payment_type, category in rows:
+            if category:
+                if payment_type == 'income':
+                    income_categories.add(category)
+                else:
+                    expense_categories.add(category)
+
+        return {
+            'income': list(income_categories),
+            'expense': list(expense_categories),
+        }
