@@ -1,3 +1,0 @@
-# This directory stores database backups.
-# Backups are created automatically on app startup
-# and can be created manually with `make backup`.
