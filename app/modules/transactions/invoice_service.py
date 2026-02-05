@@ -1,10 +1,10 @@
 """
-Invoice Service - Handles PDF generation and S3 storage for transactions
+Invoice Service - Handles PDF generation and cloud storage for transactions
 
 Optimizations:
 - Idempotent operations (never regenerate existing invoices)
 - Background processing (non-blocking)
-- Minimal S3 API calls (write-once architecture)
+- Minimal cloud storage API calls (write-once architecture)
 - Checksum verification (data integrity)
 - Async execution (scalable)
 """
@@ -18,11 +18,12 @@ from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import select
 
 from app.core.db.engine import run_db
-from app.core.s3 import S3Service
-from .invoice_generator import InvoicePDF as InvoiceGenerator
+from app.core.storage import StorageService
+from .invoice_generator import InvoiceGenerator
 from app.core.config import config
 from app.core.exceptions import NotFoundError, ValidationError
 from app.modules.transactions.models import Transaction, TransactionItem
+from app.modules.settings.models import CompanySettings
 
 
 # Thread pool for CPU-bound PDF generation (non-blocking)
@@ -36,7 +37,7 @@ class InvoiceService:
     Key Features:
     1. Idempotency: Never regenerates existing invoices
     2. Async: Non-blocking PDF generation
-    3. Optimized: Minimal S3 API calls
+    3. Optimized: Minimal cloud storage API calls
     4. Verified: Checksum validation
     5. Scalable: Thread pool for parallel generation
 
@@ -48,13 +49,13 @@ class InvoiceService:
         force_regenerate: bool = False,
     ) -> Tuple[str, str]:
         """
-        Generate PDF invoice and upload to S3 (async, non-blocking).
+        Generate PDF invoice and upload to cloud storage (async, non-blocking).
 
         Workflow:
         1. Check if invoice already exists (idempotency)
         2. Fetch transaction with all relationships
         3. Generate PDF in thread pool (CPU-bound)
-        4. Upload to S3 (write-once)
+        4. Upload to cloud storage (write-once)
         5. Update database with URL and checksum
         6. Return invoice URL and checksum
 
@@ -72,7 +73,7 @@ class InvoiceService:
         Performance:
         - Idempotent check: 1 DB query (~5ms)
         - PDF generation: 50-100ms (in thread pool)
-        - S3 upload: 1 PUT request (~50ms)
+        - Cloud storage upload: 1 PUT request (~50ms)
         - DB update: 1 UPDATE query (~5ms)
         - Total: ~150-200ms end-to-end
         """
@@ -106,17 +107,28 @@ class InvoiceService:
             if not transaction:
                 raise NotFoundError("Transaction", transaction_id)
 
-            # STEP 3: Generate PDF (CPU-bound, sync)
-            pdf_bytes: bytes = InvoiceGenerator.generate_invoice_pdf(transaction)
+            # STEP 2.5: Fetch active company settings
+            settings_query = select(CompanySettings).where(
+                CompanySettings.is_active == True,
+                CompanySettings.deleted_at.is_(None)
+            ).limit(1)
+            settings_result = db.execute(settings_query)
+            company_settings = settings_result.scalar_one_or_none()
+            
+            if not company_settings:
+                raise ValidationError("No active company settings found. Please configure company settings first.")
 
-            # STEP 4: Upload to S3 (write-once, type-safe)
+            # STEP 3: Generate PDF (CPU-bound, sync)
+            pdf_bytes: bytes = InvoiceGenerator.generate_invoice_pdf(transaction, company_settings)
+
+            # STEP 4: Upload to cloud storage (write-once, type-safe)
             timestamp: str = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
             file_key: str = (
-                f"{config.s3_invoice_prefix}{transaction.transaction_number}_{timestamp}.pdf"
+                f"{config.gcp_invoice_prefix}{transaction.transaction_number}_{timestamp}.pdf"
             )
 
-            # Upload to S3
-            invoice_url, checksum = S3Service.upload_file(
+            # Upload to cloud storage
+            invoice_url, checksum = StorageService.upload_file(
                 pdf_bytes,
                 file_key,
                 "application/pdf",
@@ -154,7 +166,7 @@ class InvoiceService:
         Performance:
         - 1 SELECT query (~5ms)
         - Minimal data transfer
-        - No S3 API calls
+        - No cloud storage API calls
         """
         def _get_metadata(db: Session) -> Dict[str, Any]:
             # Optimized query: fetch only required fields
@@ -188,13 +200,13 @@ class InvoiceService:
         expiration: int = 3600,
     ) -> str:
         """
-        Generate presigned URL for direct invoice download.
+        Generate signed URL for direct invoice download.
 
         This is the most efficient way to serve invoices:
         - No bandwidth through our server
-        - Client downloads directly from S3
+        - Client downloads directly from cloud storage
         - Temporary access (security)
-        - 0 API calls to S3 (just URL generation)
+        - 0 API calls to cloud storage (just URL generation)
 
         Args:
             transaction_id: Transaction ID
@@ -224,12 +236,42 @@ class InvoiceService:
             if not invoice_url:
                 raise ValidationError("Invoice not yet generated for this transaction")
 
-            # Extract S3 key from URL
-            # URL format: https://bucket.s3.region.amazonaws.com/key
-            s3_key = invoice_url.split(".amazonaws.com/")[1]
+            # Extract storage key from URL
+            # GCS URL format: https://storage.googleapis.com/bucket/key
+            # or: https://storage.cloud.google.com/bucket/key
+            # Legacy S3 URL format: https://bucket.s3.region.amazonaws.com/key
+            bucket_name = config.gcp_bucket_name
+            
+            if "storage.googleapis.com/" in invoice_url:
+                # Extract everything after storage.googleapis.com/
+                path_part = invoice_url.split("storage.googleapis.com/", 1)[1]
+                # Remove bucket name prefix to get the key
+                if path_part.startswith(f"{bucket_name}/"):
+                    storage_key = path_part[len(f"{bucket_name}/"):]
+                elif "/" in path_part:
+                    # Fallback: remove first segment (bucket name)
+                    storage_key = path_part.split("/", 1)[1]
+                else:
+                    storage_key = path_part
+            elif "storage.cloud.google.com/" in invoice_url:
+                # Extract everything after storage.cloud.google.com/
+                path_part = invoice_url.split("storage.cloud.google.com/", 1)[1]
+                # Remove bucket name prefix to get the key
+                if path_part.startswith(f"{bucket_name}/"):
+                    storage_key = path_part[len(f"{bucket_name}/"):]
+                elif "/" in path_part:
+                    # Fallback: remove first segment (bucket name)
+                    storage_key = path_part.split("/", 1)[1]
+                else:
+                    storage_key = path_part
+            elif ".amazonaws.com/" in invoice_url:
+                # Handle legacy S3 URLs during transition
+                storage_key = invoice_url.split(".amazonaws.com/", 1)[1]
+            else:
+                raise ValidationError(f"Unsupported invoice URL format: {invoice_url}")
 
-            # Generate presigned URL (no S3 API call)
-            presigned_url = S3Service.generate_presigned_url(s3_key, expiration)
+            # Generate signed URL (no cloud storage API call)
+            presigned_url = StorageService.generate_presigned_url(storage_key, expiration)
 
             return presigned_url
 

@@ -17,6 +17,7 @@ from app.modules.contacts import router as contacts_router
 from app.modules.transactions import router as transactions_router
 from app.modules.inventory_logs import router as inventory_logs_router
 from app.modules.payments import router as payments_router
+from app.modules.settings import router as settings_router
 
 # Configure logging to output to console
 logging.basicConfig(
@@ -95,6 +96,7 @@ app.include_router(contacts_router, prefix="/api")
 app.include_router(transactions_router, prefix="/api")
 app.include_router(inventory_logs_router, prefix="/api")
 app.include_router(payments_router, prefix="/api")
+app.include_router(settings_router, prefix="/api")
 
 
 @app.get("/demo")

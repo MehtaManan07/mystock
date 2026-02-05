@@ -31,12 +31,11 @@ services:
       # Backup configuration
       - BACKUP_DIR=/app/backups
       - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-7}
-      # AWS S3 (optional - for invoice storage)
-      - MY_AWS_REGION=${MY_AWS_REGION:-}
-      - MY_AWS_ACCESS_KEY_ID=${MY_AWS_ACCESS_KEY_ID:-}
-      - MY_AWS_SECRET_ACCESS_KEY=${MY_AWS_SECRET_ACCESS_KEY:-}
-      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
-      - S3_INVOICE_PREFIX=${S3_INVOICE_PREFIX:-invoices/}
+      # GCP Cloud Storage (optional - for invoice storage)
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-}
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-}
+      - GCP_BUCKET_NAME=${GCP_BUCKET_NAME:-}
+      - GCP_INVOICE_PREFIX=${GCP_INVOICE_PREFIX:-invoices/}
       # Redis (optional)
       - REDIS_HOST=${REDIS_HOST:-localhost}
       - REDIS_PORT=${REDIS_PORT:-6379}

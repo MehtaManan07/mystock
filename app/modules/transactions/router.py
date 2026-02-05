@@ -226,7 +226,7 @@ async def get_invoice_metadata(
     Ultra-optimized endpoint:
     - Returns only invoice-related fields
     - 1 DB query (~5ms)
-    - No S3 API calls
+    - No cloud storage API calls
     - Minimal bandwidth
 
     Use this endpoint to check if invoice exists and get its URL.
@@ -255,7 +255,7 @@ async def generate_invoice(
 
     Performance:
     - PDF generation: 50-100ms
-    - S3 upload: 1 PUT request (~50ms)
+    - Cloud storage upload: 1 PUT request (~50ms)
     - Total: ~150-200ms
     """
     invoice_url, checksum = await InvoiceService.generate_and_upload_invoice(
@@ -278,13 +278,13 @@ async def download_invoice(
     current_user: TokenData = Depends(require_any_role)
 ):
     """
-    Get presigned URL for direct invoice download from S3. (Requires authentication)
+    Get signed URL for direct invoice download from cloud storage. (Requires authentication)
 
     This is the MOST EFFICIENT way to serve invoices:
     - 0 bandwidth through our server
-    - Client downloads directly from S3
+    - Client downloads directly from cloud storage
     - Temporary access (security)
-    - 0 S3 API calls (just URL generation)
+    - 0 cloud storage API calls (just URL generation)
 
     The returned URL is valid for the specified expiration time (default 1 hour).
 
@@ -294,9 +294,9 @@ async def download_invoice(
     - Total: ~10ms
 
     Optimization:
-    - No GET request to S3
+    - No GET request to cloud storage
     - No data transfer through server
-    - Client fetches directly from S3
+    - Client fetches directly from cloud storage
     """
     presigned_url = await InvoiceService.generate_presigned_url(
         transaction_id, expiration

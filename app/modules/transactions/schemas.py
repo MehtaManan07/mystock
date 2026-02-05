@@ -214,7 +214,7 @@ class TransactionResponse(BaseModel):
 
     # Invoice fields
     invoice_url: Optional[str] = Field(
-        None, description="S3 URL of generated invoice PDF"
+        None, description="Cloud storage URL of generated invoice PDF"
     )
     invoice_checksum: Optional[str] = Field(
         None, description="MD5 checksum of invoice PDF"
@@ -300,7 +300,7 @@ class InvoiceMetadataResponse(BaseModel):
 
     transaction_id: int
     transaction_number: str
-    invoice_url: Optional[str] = Field(None, description="S3 URL of invoice PDF")
+    invoice_url: Optional[str] = Field(None, description="Cloud storage URL of invoice PDF")
     invoice_checksum: Optional[str] = Field(
         None, description="MD5 checksum for integrity verification"
     )

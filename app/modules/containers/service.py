@@ -301,8 +301,10 @@ class ContainerService:
             The Loose Stock container instance
         """
         def _ensure_loose_stock(db: Session) -> Container:
-            # Check if it already exists
-            query = select(Container).where(
+            # Check if it already exists (with eager loading of contents)
+            query = select(Container).options(
+                selectinload(Container.contents)
+            ).where(
                 Container.name == ContainerService.LOOSE_STOCK_CONTAINER_NAME,
                 Container.deleted_at.is_(None),
             )
@@ -320,6 +322,9 @@ class ContainerService:
             db.add(container)
             db.flush()
             db.refresh(container)
+            
+            # Load contents relationship
+            db.refresh(container, attribute_names=['contents'])
             return container
         return await run_db(_ensure_loose_stock)
 
