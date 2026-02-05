@@ -73,6 +73,7 @@ python-jose==3.3.0
 pytz==2025.2
 redis==5.2.1
 regex==2025.8.29
+reportlab==4.4.9
 requests==2.32.5
 rsa==4.9.1
 six==1.17.0
