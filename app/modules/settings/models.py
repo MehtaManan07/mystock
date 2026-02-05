@@ -63,6 +63,14 @@ class CompanySettings(BaseModel):
         ),
     )
 
+    # HSN Code (Harmonized System of Nomenclature code for products)
+    hsn_code: Mapped[str] = mapped_column(
+        String(15),
+        nullable=False,
+        default="44111200",
+        server_default="44111200",
+    )
+
     # Only one active settings record should exist
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, index=True

@@ -16,7 +16,11 @@ from io import BytesIO
 
 from app.modules.transactions.models import Transaction
 from app.modules.settings.models import CompanySettings
+from app.modules.vendor_product_skus.models import VendorProductSku
+from app.modules.products.models import Product
 from app.core.utils import calculate_due_date, amount_to_words, format_invoice_date
+from sqlalchemy.orm import Session
+from sqlalchemy import and_
 
 
 class InvoiceGenerator:
@@ -28,7 +32,8 @@ class InvoiceGenerator:
     @staticmethod
     def generate_invoice_pdf(
         transaction: Transaction,
-        company_settings: CompanySettings
+        company_settings: CompanySettings,
+        db: Session
     ) -> bytes:
         """
         Generate a professional GST invoice PDF from transaction data.
@@ -36,6 +41,7 @@ class InvoiceGenerator:
         Args:
             transaction: Transaction model with items, contact, etc.
             company_settings: Company settings with seller information
+            db: Database session for vendor SKU lookups
             
         Returns:
             bytes: PDF file contents
@@ -161,7 +167,7 @@ class InvoiceGenerator:
         # ---------- ITEMS TABLE WITH PAGINATION ----------
         # Prepare table header
         table_header = [
-            ['Sr.\nNo.', 'Name of Product / Service', 'HSN / SAC', 'Qty', 'Rate', 
+            ['Sr.\nNo.', 'SKU / Description', 'HSN / SAC', 'Qty', 'Rate', 
              'Taxable Value', 'IGST\n%', 'IGST\nAmount', 'Total']
         ]
         
@@ -181,9 +187,26 @@ class InvoiceGenerator:
             taxable_value = item.line_total / Decimal('1.18')
             igst_amount = item.line_total - taxable_value
             
+            # Get vendor SKU (fallback to company SKU, then product name)
+            # Try to get vendor-specific SKU
+            vendor_sku_mapping = db.query(VendorProductSku).filter(
+                and_(
+                    VendorProductSku.product_id == item.product_id,
+                    VendorProductSku.vendor_id == transaction.contact_id,
+                    VendorProductSku.deleted_at.is_(None),
+                )
+            ).first()
+            
+            if vendor_sku_mapping:
+                sku_display = vendor_sku_mapping.vendor_sku
+            elif item.product.company_sku:
+                sku_display = item.product.company_sku
+            else:
+                sku_display = item.product.name
+            
             items_data.append({
-                'name': item.product.name,
-                'hsn': '',  # HSN not available yet
+                'name': sku_display,
+                'hsn': company_settings.hsn_code,
                 'qty': item.quantity,
                 'rate': float(item.unit_price),
                 'taxable': float(taxable_value),

@@ -14,6 +14,7 @@ class CreateProductDto(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     size: str = Field(..., min_length=1, max_length=255)
     packing: str = Field(..., min_length=1, max_length=255)
+    company_sku: Optional[str] = Field(None, max_length=100, description="Company SKU (optional)")
     default_sale_price: Optional[Decimal] = Field(None, ge=0, description="Default sale price")
     default_purchase_price: Optional[Decimal] = Field(None, ge=0, description="Default purchase price")
 
@@ -36,6 +37,7 @@ class UpdateProductDto(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     size: Optional[str] = Field(None, min_length=1, max_length=255)
     packing: Optional[str] = Field(None, min_length=1, max_length=255)
+    company_sku: Optional[str] = Field(None, max_length=100, description="Company SKU")
     default_sale_price: Optional[Decimal] = Field(None, ge=0, description="Default sale price")
     default_purchase_price: Optional[Decimal] = Field(None, ge=0, description="Default purchase price")
 
@@ -50,6 +52,7 @@ class ProductResponse(BaseModel):
     name: str
     size: str
     packing: str
+    company_sku: Optional[str] = None
     default_sale_price: Optional[Decimal] = None
     default_purchase_price: Optional[Decimal] = None
     deleted_at: Optional[datetime] = None
@@ -108,6 +111,17 @@ class LogResponse(BaseModel):
         from_attributes = True
 
 
+class VendorSkuInfo(BaseModel):
+    """Vendor SKU information"""
+    
+    vendor_id: int
+    vendor_name: str
+    vendor_sku: str
+    
+    class Config:
+        from_attributes = True
+
+
 class ProductDetailResponse(BaseModel):
     """Detailed response model for Product entity with relationships"""
 
@@ -115,6 +129,7 @@ class ProductDetailResponse(BaseModel):
     name: str
     size: str
     packing: str
+    company_sku: Optional[str] = None
     default_sale_price: Optional[Decimal] = None
     default_purchase_price: Optional[Decimal] = None
     deleted_at: Optional[datetime] = None
@@ -122,6 +137,7 @@ class ProductDetailResponse(BaseModel):
     updated_at: datetime
     containers: List[ContainerProductResponse]
     logs: List[LogResponse]
+    vendor_skus: List[VendorSkuInfo] = []
 
     class Config:
         from_attributes = True

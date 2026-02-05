@@ -118,8 +118,8 @@ class InvoiceService:
             if not company_settings:
                 raise ValidationError("No active company settings found. Please configure company settings first.")
 
-            # STEP 3: Generate PDF (CPU-bound, sync)
-            pdf_bytes: bytes = InvoiceGenerator.generate_invoice_pdf(transaction, company_settings)
+            # STEP 3: Generate PDF (CPU-bound, sync) - pass db session for vendor SKU lookups
+            pdf_bytes: bytes = InvoiceGenerator.generate_invoice_pdf(transaction, company_settings, db)
 
             # STEP 4: Upload to cloud storage (write-once, type-safe)
             timestamp: str = datetime.utcnow().strftime("%Y%m%d_%H%M%S")

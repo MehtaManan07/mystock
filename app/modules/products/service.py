@@ -14,6 +14,7 @@ from .schemas import CreateProductDto, CreateProductBulkDto, UpdateProductDto
 from .models import Product
 from app.modules.container_products.models import ContainerProduct
 from app.modules.inventory_logs.models import InventoryLog
+from app.modules.vendor_product_skus.models import VendorProductSku
 
 
 class ProductService:
@@ -34,7 +35,14 @@ class ProductService:
             Created product instance
         """
         def _create(db: Session) -> Product:
-            product = Product(name=dto.name, size=dto.size, packing=dto.packing)
+            product = Product(
+                name=dto.name,
+                size=dto.size,
+                packing=dto.packing,
+                company_sku=dto.company_sku,
+                default_sale_price=dto.default_sale_price,
+                default_purchase_price=dto.default_purchase_price,
+            )
             db.add(product)
             db.flush()
             db.refresh(product)
@@ -55,7 +63,14 @@ class ProductService:
         """
         def _bulk_create(db: Session) -> List[Product]:
             products = [
-                Product(name=item.name, size=item.size, packing=item.packing)
+                Product(
+                    name=item.name,
+                    size=item.size,
+                    packing=item.packing,
+                    company_sku=item.company_sku,
+                    default_sale_price=item.default_sale_price,
+                    default_purchase_price=item.default_purchase_price,
+                )
                 for item in data.data
             ]
             db.add_all(products)
@@ -153,6 +168,7 @@ class ProductService:
                 .options(
                     selectinload(Product.containers).selectinload(ContainerProduct.container),
                     selectinload(Product.logs).selectinload(InventoryLog.container),
+                    selectinload(Product.vendor_skus).selectinload(VendorProductSku.vendor),
                 )
             )
 
@@ -172,6 +188,9 @@ class ProductService:
             ]
 
             active_logs = [log for log in product.logs if log.deleted_at is None]
+            
+            # Filter out soft-deleted vendor SKUs
+            active_vendor_skus = [vs for vs in product.vendor_skus if vs.deleted_at is None]
 
             # Sort logs by created_at DESC
             active_logs.sort(key=lambda x: x.created_at, reverse=True)
@@ -182,6 +201,9 @@ class ProductService:
                 "name": product.name,
                 "size": product.size,
                 "packing": product.packing,
+                "company_sku": product.company_sku,
+                "default_sale_price": product.default_sale_price,
+                "default_purchase_price": product.default_purchase_price,
                 "deleted_at": product.deleted_at,
                 "created_at": product.created_at,
                 "updated_at": product.updated_at,
@@ -208,6 +230,14 @@ class ProductService:
                         "created_at": log.created_at,
                     }
                     for log in active_logs
+                ],
+                "vendor_skus": [
+                    {
+                        "vendor_id": vs.vendor_id,
+                        "vendor_name": vs.vendor.name,
+                        "vendor_sku": vs.vendor_sku,
+                    }
+                    for vs in active_vendor_skus
                 ],
             }
         return await run_db(_find_one)

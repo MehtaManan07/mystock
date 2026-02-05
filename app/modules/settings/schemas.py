@@ -18,6 +18,7 @@ class CompanySettingsResponse(BaseModel):
     company_address_line2: str
     company_address_line3: str
     terms_and_conditions: str
+    hsn_code: str
     is_active: bool
     created_at: datetime
     updated_at: datetime
@@ -38,6 +39,7 @@ class UpdateCompanySettingsDto(BaseModel):
     company_address_line2: Optional[str] = Field(None, max_length=255)
     company_address_line3: Optional[str] = Field(None, max_length=255)
     terms_and_conditions: Optional[str] = Field(None)
+    hsn_code: Optional[str] = Field(None, max_length=15)
 
     class Config:
         from_attributes = True
