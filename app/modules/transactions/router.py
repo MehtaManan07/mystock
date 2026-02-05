@@ -6,9 +6,7 @@ Protected with role-based access control.
 
 from typing import List
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.db.engine import get_db_util
 from app.modules.users.auth import (
     get_current_user,
     TokenData,
@@ -36,7 +34,6 @@ router = APIRouter(prefix="/transactions", tags=["transactions"])
 @router.post("/sales", response_model=TransactionResponse, status_code=201)
 async def create_sale(
     sale_data: CreateSaleDto,
-    db: AsyncSession = Depends(get_db_util),
     current_user: TokenData = Depends(require_admin_or_staff)
 ):
     """
@@ -51,14 +48,13 @@ async def create_sale(
 
     Returns the complete transaction with all relationships.
     """
-    transaction = await TransactionsService.create_sale(db, sale_data)
+    transaction = await TransactionsService.create_sale(sale_data)
     return transaction
 
 
 @router.post("/purchases", response_model=TransactionResponse, status_code=201)
 async def create_purchase(
     purchase_data: CreatePurchaseDto,
-    db: AsyncSession = Depends(get_db_util),
     current_user: TokenData = Depends(require_admin_or_staff)
 ):
     """
@@ -73,7 +69,7 @@ async def create_purchase(
 
     Returns the complete transaction with all relationships.
     """
-    transaction = await TransactionsService.create_purchase(db, purchase_data)
+    transaction = await TransactionsService.create_purchase(purchase_data)
     return transaction
 
 
@@ -89,7 +85,6 @@ async def list_transactions(
     search: str | None = Query(
         None, description="Search in transaction number or notes"
     ),
-    db: AsyncSession = Depends(get_db_util),
     current_user: TokenData = Depends(require_any_role)
 ):
     """
@@ -131,14 +126,13 @@ async def list_transactions(
         search=search,
     )
 
-    transactions = await TransactionsService.list_transactions(db, filters)
+    transactions = await TransactionsService.list_transactions(filters)
     return transactions
 
 
 @router.get("/{transaction_id}", response_model=TransactionResponse)
 async def get_transaction(
     transaction_id: int,
-    db: AsyncSession = Depends(get_db_util),
     current_user: TokenData = Depends(require_any_role)
 ):
     """
@@ -149,14 +143,13 @@ async def get_transaction(
     - All line items with product and container info
     - All payment records
     """
-    transaction = await TransactionsService.get_transaction(db, transaction_id)
+    transaction = await TransactionsService.get_transaction(transaction_id)
     return transaction
 
 
 @router.delete("/{transaction_id}", status_code=204)
 async def delete_transaction(
     transaction_id: int,
-    db: AsyncSession = Depends(get_db_util),
     current_user: TokenData = Depends(require_admin)
 ):
     """
@@ -169,7 +162,7 @@ async def delete_transaction(
 
     Note: This is a destructive operation. Use with caution.
     """
-    await TransactionsService.delete_transaction(db, transaction_id)
+    await TransactionsService.delete_transaction(transaction_id)
     return None
 
 
@@ -179,7 +172,6 @@ async def delete_transaction(
 async def record_payment(
     transaction_id: int,
     payment_data: CreatePaymentDto,
-    db: AsyncSession = Depends(get_db_util),
     current_user: TokenData = Depends(require_admin_or_staff)
 ):
     """
@@ -199,7 +191,7 @@ async def record_payment(
     Returns the updated transaction with all relationships.
     """
     transaction = await TransactionsService.record_payment(
-        db, transaction_id, payment_data
+        transaction_id, payment_data
     )
     return transaction
 
@@ -207,7 +199,6 @@ async def record_payment(
 @router.get("/{transaction_id}/payments", response_model=List[PaymentResponse])
 async def get_transaction_payments(
     transaction_id: int,
-    db: AsyncSession = Depends(get_db_util),
     current_user: TokenData = Depends(require_any_role)
 ):
     """
@@ -215,7 +206,7 @@ async def get_transaction_payments(
 
     Returns list of payment records ordered by payment date.
     """
-    transaction = await TransactionsService.get_transaction(db, transaction_id)
+    transaction = await TransactionsService.get_transaction(transaction_id)
     return transaction.payments
 
 
@@ -227,7 +218,6 @@ async def get_transaction_payments(
 )
 async def get_invoice_metadata(
     transaction_id: int,
-    db: AsyncSession = Depends(get_db_util),
     current_user: TokenData = Depends(require_any_role)
 ):
     """
@@ -241,7 +231,7 @@ async def get_invoice_metadata(
 
     Use this endpoint to check if invoice exists and get its URL.
     """
-    metadata = await InvoiceService.get_invoice_metadata(db, transaction_id)
+    metadata = await InvoiceService.get_invoice_metadata(transaction_id)
     return metadata
 
 
@@ -251,7 +241,6 @@ async def generate_invoice(
     force_regenerate: bool = Query(
         False, description="Force regenerate if already exists"
     ),
-    db: AsyncSession = Depends(get_db_util),
     current_user: TokenData = Depends(require_admin_or_staff)
 ):
     """
@@ -270,7 +259,7 @@ async def generate_invoice(
     - Total: ~150-200ms
     """
     invoice_url, checksum = await InvoiceService.generate_and_upload_invoice(
-        db, transaction_id, force_regenerate
+        transaction_id, force_regenerate
     )
 
     return {
@@ -286,7 +275,6 @@ async def download_invoice(
     expiration: int = Query(
         3600, ge=300, le=86400, description="URL validity in seconds (5min - 24h)"
     ),
-    db: AsyncSession = Depends(get_db_util),
     current_user: TokenData = Depends(require_any_role)
 ):
     """
@@ -311,7 +299,7 @@ async def download_invoice(
     - Client fetches directly from S3
     """
     presigned_url = await InvoiceService.generate_presigned_url(
-        db, transaction_id, expiration
+        transaction_id, expiration
     )
 
     return {

@@ -1,6 +1,8 @@
-from sqlalchemy import Integer, ForeignKey, Index, inspect
+from datetime import datetime
+from typing import TYPE_CHECKING, Optional
+
+from sqlalchemy import Integer, ForeignKey, Index, DateTime, inspect
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from typing import TYPE_CHECKING
 
 from app.core.db import BaseModel
 
@@ -41,6 +43,11 @@ class ContainerProduct(BaseModel):
     )
 
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Track when location was last verified/confirmed
+    last_verified_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
 
     # Relationships
     container: Mapped["Container"] = relationship(

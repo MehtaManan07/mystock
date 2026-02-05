@@ -14,14 +14,15 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, Optional, Tuple
 from datetime import datetime
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import select
 
+from app.core.db.engine import run_db
 from app.core.s3 import S3Service
 from .invoice_generator import InvoicePDF as InvoiceGenerator
 from app.core.config import config
 from app.core.exceptions import NotFoundError, ValidationError
-from app.modules.transactions.models import Transaction
+from app.modules.transactions.models import Transaction, TransactionItem
 
 
 # Thread pool for CPU-bound PDF generation (non-blocking)
@@ -43,7 +44,6 @@ class InvoiceService:
 
     @staticmethod
     async def generate_and_upload_invoice(
-        db: AsyncSession,
         transaction_id: int,
         force_regenerate: bool = False,
     ) -> Tuple[str, str]:
@@ -59,7 +59,6 @@ class InvoiceService:
         6. Return invoice URL and checksum
 
         Args:
-            db: Database session
             transaction_id: Transaction ID to generate invoice for
             force_regenerate: If True, regenerate even if exists (default: False)
 
@@ -77,86 +76,73 @@ class InvoiceService:
         - DB update: 1 UPDATE query (~5ms)
         - Total: ~150-200ms end-to-end
         """
-        # STEP 1: Check if invoice already exists (idempotency)
-        if not force_regenerate:
-            check_query = select(
-                Transaction.invoice_url, Transaction.invoice_checksum
-            ).where(Transaction.id == transaction_id, Transaction.deleted_at.is_(None))
-            result = await db.execute(check_query)
-            existing = result.first()
+        def _generate_and_upload(db: Session) -> Tuple[str, str]:
+            # STEP 1: Check if invoice already exists (idempotency)
+            if not force_regenerate:
+                check_query = select(
+                    Transaction.invoice_url, Transaction.invoice_checksum
+                ).where(Transaction.id == transaction_id, Transaction.deleted_at.is_(None))
+                result = db.execute(check_query)
+                existing = result.first()
 
-            if existing and existing[0]:  # invoice_url exists
-                return existing[0], existing[1]  # Return existing URL and checksum
+                if existing and existing[0]:  # invoice_url exists
+                    return existing[0], existing[1]  # Return existing URL and checksum
 
-        # STEP 2: Fetch transaction with all relationships
-        from sqlalchemy.orm import selectinload
-        from app.modules.transactions.models import TransactionItem
-
-        query = (
-            select(Transaction)
-            .options(
-                selectinload(Transaction.contact),
-                selectinload(Transaction.items).selectinload(TransactionItem.product),
-                selectinload(Transaction.items).selectinload(TransactionItem.container),
-                selectinload(Transaction.payments),
+            # STEP 2: Fetch transaction with all relationships
+            query = (
+                select(Transaction)
+                .options(
+                    selectinload(Transaction.contact),
+                    selectinload(Transaction.items).selectinload(TransactionItem.product),
+                    selectinload(Transaction.items).selectinload(TransactionItem.container),
+                    selectinload(Transaction.payments),
+                )
+                .where(Transaction.id == transaction_id, Transaction.deleted_at.is_(None))
             )
-            .where(Transaction.id == transaction_id, Transaction.deleted_at.is_(None))
-        )
 
-        result = await db.execute(query)
-        transaction = result.scalar_one_or_none()
+            result = db.execute(query)
+            transaction = result.scalar_one_or_none()
 
-        if not transaction:
-            raise NotFoundError("Transaction", transaction_id)
+            if not transaction:
+                raise NotFoundError("Transaction", transaction_id)
 
-        # STEP 4: Generate PDF in thread pool (non-blocking, CPU-bound)
-        # Pass Transaction model directly - no serialization needed!
-        loop = asyncio.get_event_loop()
-        pdf_bytes: bytes = await loop.run_in_executor(
-            _executor, InvoiceGenerator.generate_invoice_pdf, transaction
-        )
+            # STEP 3: Generate PDF (CPU-bound, sync)
+            pdf_bytes: bytes = InvoiceGenerator.generate_invoice_pdf(transaction)
 
-        # STEP 5: Upload to S3 (write-once, type-safe)
-        # Generate S3 key with timestamp for uniqueness
-        timestamp: str = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        file_key: str = (
-            f"{config.s3_invoice_prefix}{transaction.transaction_number}_{timestamp}.pdf"
-        )
+            # STEP 4: Upload to S3 (write-once, type-safe)
+            timestamp: str = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            file_key: str = (
+                f"{config.s3_invoice_prefix}{transaction.transaction_number}_{timestamp}.pdf"
+            )
 
-        # Upload to S3 (runs in thread pool internally)
-        invoice_url: str
-        checksum: str
-        invoice_url, checksum = await loop.run_in_executor(
-            _executor,
-            S3Service.upload_file,
-            pdf_bytes,
-            file_key,
-            "application/pdf",
-            {
-                "transaction_id": str(transaction_id),
-                "transaction_number": transaction.transaction_number,
-            },
-        )
+            # Upload to S3
+            invoice_url, checksum = S3Service.upload_file(
+                pdf_bytes,
+                file_key,
+                "application/pdf",
+                {
+                    "transaction_id": str(transaction_id),
+                    "transaction_number": transaction.transaction_number,
+                },
+            )
 
-        # STEP 6: Update database with invoice metadata
-        transaction.invoice_url = invoice_url
-        transaction.invoice_checksum = checksum
-        await db.flush()
+            # STEP 5: Update database with invoice metadata
+            transaction.invoice_url = invoice_url
+            transaction.invoice_checksum = checksum
+            db.flush()
 
-        return invoice_url, checksum
+            return invoice_url, checksum
+
+        return await run_db(_generate_and_upload)
 
     @staticmethod
-    async def get_invoice_metadata(
-        db: AsyncSession,
-        transaction_id: int,
-    ) -> Dict[str, Any]:
+    async def get_invoice_metadata(transaction_id: int) -> Dict[str, Any]:
         """
         Get invoice metadata without fetching the full transaction.
 
         Ultra-optimized endpoint that returns only invoice-related data.
 
         Args:
-            db: Database session
             transaction_id: Transaction ID
 
         Returns:
@@ -170,34 +156,34 @@ class InvoiceService:
         - Minimal data transfer
         - No S3 API calls
         """
-        # Optimized query: fetch only required fields
-        query = select(
-            Transaction.id,
-            Transaction.transaction_number,
-            Transaction.invoice_url,
-            Transaction.invoice_checksum,
-        ).where(Transaction.id == transaction_id, Transaction.deleted_at.is_(None))
+        def _get_metadata(db: Session) -> Dict[str, Any]:
+            # Optimized query: fetch only required fields
+            query = select(
+                Transaction.id,
+                Transaction.transaction_number,
+                Transaction.invoice_url,
+                Transaction.invoice_checksum,
+            ).where(Transaction.id == transaction_id, Transaction.deleted_at.is_(None))
 
-        result = await db.execute(query)
-        row = result.first()
+            result = db.execute(query)
+            row = result.first()
 
-        if not row:
-            raise NotFoundError("Transaction", transaction_id)
+            if not row:
+                raise NotFoundError("Transaction", transaction_id)
 
-        trans_id, trans_number, invoice_url, invoice_checksum = row
+            trans_id, trans_number, invoice_url, invoice_checksum = row
 
-        # Calculate estimated file size
-        # Note: We don't have item count here, so we use a conservative estimate
-        return {
-            "transaction_id": trans_id,
-            "transaction_number": trans_number,
-            "invoice_url": invoice_url,
-            "invoice_checksum": invoice_checksum,
-        }
+            return {
+                "transaction_id": trans_id,
+                "transaction_number": trans_number,
+                "invoice_url": invoice_url,
+                "invoice_checksum": invoice_checksum,
+            }
+
+        return await run_db(_get_metadata)
 
     @staticmethod
     async def generate_presigned_url(
-        db: AsyncSession,
         transaction_id: int,
         expiration: int = 3600,
     ) -> str:
@@ -211,7 +197,6 @@ class InvoiceService:
         - 0 API calls to S3 (just URL generation)
 
         Args:
-            db: Database session
             transaction_id: Transaction ID
             expiration: URL validity in seconds (default 1 hour)
 
@@ -227,30 +212,31 @@ class InvoiceService:
         - URL generation (~1ms)
         - Total: ~10ms
         """
-        # Fetch invoice URL from database
-        query = select(Transaction.invoice_url).where(
-            Transaction.id == transaction_id, Transaction.deleted_at.is_(None)
-        )
+        def _generate_presigned_url(db: Session) -> str:
+            # Fetch invoice URL from database
+            query = select(Transaction.invoice_url).where(
+                Transaction.id == transaction_id, Transaction.deleted_at.is_(None)
+            )
 
-        result = await db.execute(query)
-        invoice_url = result.scalar_one_or_none()
+            result = db.execute(query)
+            invoice_url = result.scalar_one_or_none()
 
-        print(f"invoice_url: {invoice_url}")
-        if not invoice_url:
-            raise ValidationError("Invoice not yet generated for this transaction")
+            if not invoice_url:
+                raise ValidationError("Invoice not yet generated for this transaction")
 
-        # Extract S3 key from URL
-        # URL format: https://bucket.s3.region.amazonaws.com/key
-        s3_key = invoice_url.split(".amazonaws.com/")[1]
+            # Extract S3 key from URL
+            # URL format: https://bucket.s3.region.amazonaws.com/key
+            s3_key = invoice_url.split(".amazonaws.com/")[1]
 
-        # Generate presigned URL (no S3 API call)
-        presigned_url = S3Service.generate_presigned_url(s3_key, expiration)
+            # Generate presigned URL (no S3 API call)
+            presigned_url = S3Service.generate_presigned_url(s3_key, expiration)
 
-        return presigned_url
+            return presigned_url
+
+        return await run_db(_generate_presigned_url)
 
     @staticmethod
     async def auto_generate_invoice_after_transaction(
-        db: AsyncSession,
         transaction_id: int,
     ) -> None:
         """
@@ -260,7 +246,6 @@ class InvoiceService:
         to avoid blocking the response.
 
         Args:
-            db: Database session
             transaction_id: Transaction ID to generate invoice for
 
         Notes:
@@ -269,7 +254,7 @@ class InvoiceService:
         - Fire-and-forget (errors logged but not raised)
         """
         try:
-            await InvoiceService.generate_and_upload_invoice(db, transaction_id)
+            await InvoiceService.generate_and_upload_invoice(transaction_id)
         except Exception as e:
             # Log error but don't raise (background task)
             print(

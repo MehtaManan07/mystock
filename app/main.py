@@ -35,12 +35,16 @@ async def lifespan(app: FastAPI):
     """
     Application lifespan manager.
     """
-    logger.info("Starting MyStock API...")
+    from app.core.db.engine import check_database_connection
     
-    if config.is_sqlite:
-        logger.info(f"Using SQLite database: {config.sqlite_db_path}")
+    logger.info("Starting MyStock API...")
+    logger.info(f"Connecting to Turso database: {config.turso_database_url}")
+    
+    # Verify database connection on startup
+    if await check_database_connection():
+        logger.info("Database connection verified successfully")
     else:
-        logger.info("Using PostgreSQL database")
+        logger.error("Failed to connect to database!")
     
     yield  # App runs here
     
@@ -50,7 +54,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="MyStock API",
-    description="Inventory management system with SQLite backend",
+    description="Inventory management system with Turso (libSQL) backend",
     version="1.0.0",
     lifespan=lifespan,
 )

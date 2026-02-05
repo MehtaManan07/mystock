@@ -1,23 +1,17 @@
 """
-Alembic environment configuration with SQLite and PostgreSQL support.
+Alembic environment configuration for Turso (libSQL).
 
-Key features:
-- Async migration support for both databases
-- Batch mode for SQLite (required for ALTER TABLE operations)
-- Auto-detection of database type from URL
-- Proper driver conversion for Alembic (async -> sync)
+Uses synchronous engine for Turso via sqlalchemy-libsql.
 """
 
-import asyncio
 import os
 from logging.config import fileConfig
-from sqlalchemy import pool, event
+from sqlalchemy import create_engine
 from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import create_async_engine
 from alembic import context
 from dotenv import load_dotenv
 
-# Import your models here so Alembic can detect them
+# Import your models here for autogenerate support
 from app.core.db.base import Base
 from app.modules.users.models import User
 from app.modules.products.models import Product
@@ -28,127 +22,81 @@ from app.modules.contacts.models import Contact
 from app.modules.transactions.models import Transaction, TransactionItem
 from app.modules.payments.models import Payment
 
-# Load environment variables from .env file
+# Load .env
 load_dotenv()
 
-# this is the Alembic Config object
 config = context.config
 
-# Get database URL from environment
-db_url = os.getenv("DB_URL")
+# -------------------------------
+# TURSO DATABASE CONFIGURATION
+# -------------------------------
+TURSO_DATABASE_URL = os.getenv("TURSO_DATABASE_URL")
+TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN")
 
-# If no DB_URL, use SQLite default
-if not db_url:
-    from pathlib import Path
-    project_root = Path(__file__).resolve().parent.parent
-    db_url = f"sqlite+aiosqlite:///{project_root}/data/inventory.db"
-    # Ensure data directory exists
-    (project_root / "data").mkdir(parents=True, exist_ok=True)
+if not TURSO_DATABASE_URL or not TURSO_AUTH_TOKEN:
+    raise ValueError("TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must be set in .env")
 
+# Build SQLAlchemy URL for libSQL
+db_url = TURSO_DATABASE_URL.replace("libsql://", "sqlite+libsql://") + "?secure=true"
 config.set_main_option("sqlalchemy.url", db_url)
 
-# Determine if we're using SQLite
-is_sqlite = db_url.startswith("sqlite")
-
-# Interpret the config file for Python logging.
+# Logging
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# add your model's MetaData object here for 'autogenerate' support
+# Target metadata for autogenerate
 target_metadata = Base.metadata
 
 
-def _configure_sqlite_connection(dbapi_connection, connection_record):
-    """
-    Configure SQLite connection with same settings as the app.
-    Required for migrations to work correctly with foreign keys.
-    """
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.execute("PRAGMA busy_timeout=30000")
-    cursor.close()
-
-
+# -------------------------------
+# RUN MIGRATIONS OFFLINE
+# -------------------------------
 def run_migrations_offline() -> None:
-    """
-    Run migrations in 'offline' mode.
-    
-    This generates SQL without connecting to the database.
-    Useful for reviewing migration SQL before applying.
-    """
-    url = config.get_main_option("sqlalchemy.url")
-    
+    """Generate SQL without connecting to the database."""
     context.configure(
-        url=url,
+        url=db_url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         compare_type=True,
         compare_server_default=True,
-        # Enable batch mode for SQLite - required for ALTER TABLE operations
-        render_as_batch=is_sqlite,
+        render_as_batch=True,  # Required for SQLite-based databases
     )
-
     with context.begin_transaction():
         context.run_migrations()
 
 
+# -------------------------------
+# RUN MIGRATIONS ONLINE
+# -------------------------------
 def do_run_migrations(connection: Connection) -> None:
-    """
-    Configure and run migrations with the given connection.
-    
-    For SQLite:
-    - render_as_batch=True: Required because SQLite doesn't support
-      many ALTER TABLE operations. Batch mode recreates tables.
-    - No naming convention issues with batch mode.
-    """
+    """Run migrations on the given connection."""
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
         compare_type=True,
         compare_server_default=True,
-        # Enable batch mode for SQLite - recreates tables for ALTER operations
-        render_as_batch=is_sqlite,
+        render_as_batch=True,  # Required for SQLite-based databases
     )
-
     with context.begin_transaction():
         context.run_migrations()
 
 
-async def run_async_migrations() -> None:
-    """
-    Run migrations in 'online' mode with async engine.
-    
-    Handles both SQLite (aiosqlite) and PostgreSQL (asyncpg).
-    """
-    url = config.get_main_option("sqlalchemy.url")
-    if not url:
-        raise RuntimeError("No database URL configured")
-
-    # Create async engine
-    connectable = create_async_engine(
-        url,
-        poolclass=pool.NullPool,
-    )
-
-    # Register SQLite pragma settings
-    if is_sqlite:
-        @event.listens_for(connectable.sync_engine, "connect")
-        def set_sqlite_pragma(dbapi_connection, connection_record):
-            _configure_sqlite_connection(dbapi_connection, connection_record)
-
-    async with connectable.connect() as connection:
-        await connection.run_sync(do_run_migrations)
-
-    await connectable.dispose()
-
-
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
-    asyncio.run(run_async_migrations())
+    connectable = create_engine(
+        db_url,
+        connect_args={"auth_token": TURSO_AUTH_TOKEN},
+        pool_pre_ping=True,
+    )
+
+    with connectable.connect() as connection:
+        do_run_migrations(connection)
 
 
+# -------------------------------
+# EXECUTION
+# -------------------------------
 if context.is_offline_mode():
     run_migrations_offline()
 else:

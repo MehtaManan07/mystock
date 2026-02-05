@@ -11,8 +11,6 @@ from jwt.exceptions import PyJWTError, ExpiredSignatureError
 from datetime import datetime, timedelta
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
 from app.core.config import config
 from app.core.exceptions import UnauthorizedError

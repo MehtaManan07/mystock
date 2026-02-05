@@ -4,10 +4,8 @@ Protected with role-based access control.
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Query
 
-from app.core.db.engine import get_db_util
 from app.core.response_interceptor import skip_interceptor
 from .service import ProductService
 from .schemas import (
@@ -22,13 +20,9 @@ router = APIRouter(prefix="/products", tags=["products"])
 
 
 @router.post("", response_model=ProductResponse)
-async def create_product(
-    dto: CreateProductDto,
-    db: AsyncSession = Depends(get_db_util)
-):
+async def create_product(dto: CreateProductDto):
     """Create a new product"""
-    product = await ProductService.create(db, dto)
-    await db.commit()
+    product = await ProductService.create(dto)
     
     # Return with totalQuantity = 0 for new products
     return ProductResponse(
@@ -44,13 +38,9 @@ async def create_product(
 
 
 @router.post("/bulk", response_model=List[ProductResponse])
-async def bulk_create_products(
-    data: CreateProductBulkDto,
-    db: AsyncSession = Depends(get_db_util)
-):
+async def bulk_create_products(data: CreateProductBulkDto):
     """Bulk create products"""
-    products = await ProductService.bulk_create(db, data)
-    await db.commit()
+    products = await ProductService.bulk_create(data)
     
     # Return products with totalQuantity = 0 for new products
     return [
@@ -71,35 +61,26 @@ async def bulk_create_products(
 @router.get("", response_model=List[ProductResponse])
 async def get_all_products(
     search: Optional[str] = Query(None, description="Search by name, size, or packing"),
-    db: AsyncSession = Depends(get_db_util)
 ):
     """
     Get all products with optional search filter.
     Returns products with totalQuantity computed from containers.
     """
-    products = await ProductService.find_all(db, search)
+    products = await ProductService.find_all(search)
     return products
 
 
 @router.get("/{product_id}", response_model=ProductDetailResponse)
-async def get_product_by_id(
-    product_id: int,
-    db: AsyncSession = Depends(get_db_util)
-):
+async def get_product_by_id(product_id: int):
     """Get product by ID with containers and logs (excludes soft-deleted products)"""
-    product = await ProductService.find_one(db, product_id)
+    product = await ProductService.find_one(product_id)
     return product
 
 
 @router.patch("/{product_id}", response_model=ProductResponse)
-async def update_product(
-    product_id: int,
-    dto: UpdateProductDto,
-    db: AsyncSession = Depends(get_db_util)
-):
+async def update_product(product_id: int, dto: UpdateProductDto):
     """Update product information"""
-    product = await ProductService.update(db, product_id, dto)
-    await db.commit()
+    product = await ProductService.update(product_id, dto)
     
     # Return with totalQuantity = 0 (or you could recalculate if needed)
     return ProductResponse(
@@ -116,12 +97,7 @@ async def update_product(
 
 @router.delete("/{product_id}")
 @skip_interceptor
-async def delete_product(
-    product_id: int,
-    db: AsyncSession = Depends(get_db_util)
-):
+async def delete_product(product_id: int):
     """Soft delete product"""
-    await ProductService.remove(db, product_id)
-    await db.commit()
+    await ProductService.remove(product_id)
     return {"message": "Product deleted successfully"}
-

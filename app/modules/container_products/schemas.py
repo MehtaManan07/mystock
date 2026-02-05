@@ -65,6 +65,7 @@ class ContainerProductResponse(BaseModel):
     container_id: int
     product_id: int
     quantity: int
+    last_verified_at: Optional[datetime] = None
     deleted_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
