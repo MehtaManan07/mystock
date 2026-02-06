@@ -62,6 +62,55 @@ class InvoiceGenerator:
         pdfmetrics.registerFont(TTFont('DejaVuSans-Bold', os.path.join(FONTS_DIR, 'DejaVuSans-Bold.ttf')))
         pdfmetrics.registerFont(TTFont('DejaVuSans-Oblique', os.path.join(FONTS_DIR, 'DejaVuSans-Oblique.ttf')))
         
+        def wrap_text(text, max_width, font_name, font_size):
+            """
+            Wrap text to fit within max_width, returning a list of lines.
+            
+            Args:
+                text: Text to wrap
+                max_width: Maximum width in points
+                font_name: Font name
+                font_size: Font size
+                
+            Returns:
+                List of text lines
+            """
+            if not text:
+                return [""]
+            
+            words = text.split()
+            lines = []
+            current_line = []
+            current_width = 0
+            
+            for word in words:
+                # Calculate width of word with space
+                word_width = c.stringWidth(word + " ", font_name, font_size)
+                word_width_only = c.stringWidth(word, font_name, font_size)
+                
+                # If single word is longer than max_width, add it anyway (will be truncated by PDF)
+                if word_width_only > max_width:
+                    if current_line:
+                        lines.append(" ".join(current_line))
+                        current_line = []
+                        current_width = 0
+                    lines.append(word)
+                    continue
+                
+                if current_width + word_width <= max_width:
+                    current_line.append(word)
+                    current_width += word_width
+                else:
+                    if current_line:
+                        lines.append(" ".join(current_line))
+                    current_line = [word]
+                    current_width = word_width
+            
+            if current_line:
+                lines.append(" ".join(current_line))
+            
+            return lines if lines else [text]
+        
         def draw_header(c, is_first_page=True):
             """Draw the header section"""
             y = top_margin
@@ -111,10 +160,16 @@ class InvoiceGenerator:
                 y -= 15
                 
                 c.setFont("DejaVuSans", 9)
-                # Handle None address
+                # Handle None address with text wrapping
                 customer_address = transaction.contact.address or "-"
-                c.drawString(left_margin, y, f"Address {customer_address}")
-                y -= 13
+                address_text = f"Address {customer_address}"
+                # Calculate available width for address (leave some margin)
+                available_width = right_margin - left_margin - 20
+                address_lines = wrap_text(address_text, available_width, "DejaVuSans", 9)
+                
+                for line in address_lines:
+                    c.drawString(left_margin, y, line)
+                    y -= 13
                 
                 # Handle None phone
                 customer_phone = transaction.contact.phone or "-"
@@ -168,10 +223,10 @@ class InvoiceGenerator:
         # Prepare table header
         table_header = [
             ['Sr.\nNo.', 'SKU / Description', 'HSN / SAC', 'Qty', 'Rate', 
-             'Taxable Value', 'IGST\n%', 'IGST\nAmount', 'Total']
+             'IGST\n%', 'IGST\nAmount', 'Total']
         ]
         
-        col_widths = [30, 140, 60, 40, 50, 70, 40, 50, 60]
+        col_widths = [30, 140, 60, 40, 50, 40, 50, 60]
         
         # Calculate totals and prepare items data
         items_data = []
@@ -181,11 +236,11 @@ class InvoiceGenerator:
         total_amount = Decimal('0')
         
         for item in transaction.items:
-            # Calculate taxable value (back-calculate from line_total assuming 18% GST)
-            # line_total = taxable_value * 1.18
-            # taxable_value = line_total / 1.18
-            taxable_value = item.line_total / Decimal('1.18')
-            igst_amount = item.line_total - taxable_value
+            # Calculate: Rate * Quantity = Taxable Value
+            # Total = Taxable Value + GST (where GST = Taxable Value * 18%)
+            rate_total = item.unit_price * item.quantity
+            igst_amount = rate_total * Decimal('0.18')
+            total_amount_item = rate_total + igst_amount
             
             # Get vendor SKU (fallback to company SKU, then product name)
             # Try to get vendor-specific SKU
@@ -209,16 +264,16 @@ class InvoiceGenerator:
                 'hsn': company_settings.hsn_code,
                 'qty': item.quantity,
                 'rate': float(item.unit_price),
-                'taxable': float(taxable_value),
+                'taxable': float(rate_total),  # Keep for summary calculations
                 'igst_percent': 18.0,
                 'igst_amount': float(igst_amount),
-                'total': float(item.line_total)
+                'total': float(total_amount_item)
             })
             
             total_qty += item.quantity
-            total_taxable += taxable_value
+            total_taxable += rate_total
             total_igst += igst_amount
-            total_amount += item.line_total
+            total_amount += total_amount_item
         
         # Process items in chunks that fit on each page
         items_per_page_first = 20  # First page has less space due to header
@@ -248,7 +303,6 @@ class InvoiceGenerator:
                     item['hsn'],
                     f"{item['qty']:.2f}",
                     f"{item['rate']:.2f}",
-                    f"{item['taxable']:.2f}",
                     f"{item['igst_percent']:.2f}",
                     f"{item['igst_amount']:.2f}",
                     f"{item['total']:.2f}"
@@ -262,7 +316,6 @@ class InvoiceGenerator:
                     '',
                     f"{float(total_qty):.2f}",
                     '',
-                    f"{float(total_taxable):.2f}",
                     '',
                     f"{float(total_igst):.2f}",
                     f"{float(total_amount):.2f}"
@@ -299,8 +352,13 @@ class InvoiceGenerator:
         
         c.setFont("DejaVuSans", 9)
         words = amount_to_words(total_amount)
-        c.drawString(left_margin, y, words)
-        y -= 25
+        # Wrap long amount in words text
+        available_width = right_margin - left_margin - 20
+        words_lines = wrap_text(words, available_width, "DejaVuSans", 9)
+        for line in words_lines:
+            c.drawString(left_margin, y, line)
+            y -= 13
+        y -= 5  # Extra spacing after wrapped text
         
         # ---------- TERMS AND CONDITIONS ----------
         c.setFont("DejaVuSans-Bold", 9)

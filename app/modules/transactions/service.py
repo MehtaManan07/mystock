@@ -154,7 +154,7 @@ class TransactionsService:
         )
 
         result = db.execute(query)
-        last_transaction = result.scalar_one_or_none()
+        last_transaction = result.unique().scalar_one_or_none()
 
         if not last_transaction:
             return f"{prefix}-0001"
@@ -421,7 +421,7 @@ class TransactionsService:
                 .where(Transaction.id == transaction_id, Transaction.deleted_at.is_(None))
             )
             result = db.execute(transaction_query)
-            transaction = result.scalar_one_or_none()
+            transaction = result.unique().scalar_one_or_none()
 
             if not transaction:
                 raise NotFoundError("Transaction", transaction_id)
@@ -497,7 +497,7 @@ class TransactionsService:
             )
 
             result = db.execute(query)
-            transaction = result.scalar_one_or_none()
+            transaction = result.unique().scalar_one_or_none()
 
             if not transaction:
                 raise NotFoundError("Transaction", transaction_id)
@@ -567,7 +567,7 @@ class TransactionsService:
             )
 
             result = db.execute(query)
-            transaction = result.scalar_one_or_none()
+            transaction = result.unique().scalar_one_or_none()
 
             if not transaction:
                 raise NotFoundError("Transaction", transaction_id)

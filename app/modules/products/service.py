@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.db.engine import run_db
 from app.core.exceptions import NotFoundError
 
-from .schemas import CreateProductDto, CreateProductBulkDto, UpdateProductDto
-from .models import Product
+from app.modules.products.schemas import CreateProductDto, CreateProductBulkDto, UpdateProductDto
+from app.modules.products.models import Product
 from app.modules.container_products.models import ContainerProduct
 from app.modules.inventory_logs.models import InventoryLog
 from app.modules.vendor_product_skus.models import VendorProductSku
