@@ -86,6 +86,3 @@ class Product(BaseModel):
     vendor_skus: Mapped[list["VendorProductSku"]] = relationship(
         "VendorProductSku", back_populates="product", cascade="all, delete-orphan"
     )
-
-    def __repr__(self) -> str:
-        return f"<Product(id={self.id}, name='{self.name}', size='{self.size}', packing='{self.packing}', company_sku='{self.company_sku}')>"
