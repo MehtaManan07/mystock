@@ -1,7 +1,7 @@
 from decimal import Decimal
-from sqlalchemy import String, Index, Numeric
+from sqlalchemy import String, Index, Numeric, Text, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, List, Dict, Any
 
 from app.core.db import BaseModel
 
@@ -49,6 +49,29 @@ class Product(BaseModel):
         Numeric(precision=15, scale=2),
         nullable=True,
         default=None,
+    )
+
+    # E-commerce fields
+    description: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True, default=None
+    )
+
+    mrp: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(precision=15, scale=2),
+        nullable=True,
+        default=None,
+    )
+
+    tags: Mapped[Optional[List[str]]] = mapped_column(
+        JSON, nullable=True, default=None
+    )
+
+    product_type: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True, default=None
+    )
+
+    dimensions: Mapped[Optional[Dict[str, Any]]] = mapped_column(
+        JSON, nullable=True, default=None
     )
 
     # Relationships

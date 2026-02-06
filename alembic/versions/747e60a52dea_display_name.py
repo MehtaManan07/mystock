@@ -1,7 +1,7 @@
 """display name
 
 Revision ID: 747e60a52dea
-Revises: 0005_add_company_sku_and_hsn
+Revises: 0004_add_company_settings
 Create Date: 2026-02-06 02:42:19.712301
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '747e60a52dea'
-down_revision: Union[str, Sequence[str], None] = '0005_add_company_sku_and_hsn'
+down_revision: Union[str, Sequence[str], None] = '0004_add_company_settings'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
