@@ -108,20 +108,25 @@ class StorageService:
 
         try:
             import google.auth
-            from google.auth import compute_engine
-
+            from google.auth import compute_engine, impersonated_credentials
+            from google.auth.transport import requests
+            
             credentials, project = google.auth.default()
-
-            # For Compute Engine credentials, we need to use IAM signing
+            
+            # For Compute Engine credentials, use impersonation for signing
             if isinstance(credentials, compute_engine.Credentials):
-                from google.auth import iam
-                from google.auth.transport import requests
-
-                # Create a signing credentials object that uses the IAM API
-                signing_credentials = iam.Signer(
-                    requests.Request(), credentials, credentials.service_account_email
+                # Get a fresh token
+                auth_request = requests.Request()
+                credentials.refresh(auth_request)
+                
+                # Create signing credentials via impersonation
+                signing_credentials = impersonated_credentials.Credentials(
+                    source_credentials=credentials,
+                    target_principal=credentials.service_account_email,
+                    target_scopes=['https://www.googleapis.com/auth/cloud-platform'],
+                    lifetime=3600
                 )
-
+                
                 url: str = blob.generate_signed_url(
                     version="v4",
                     expiration=timedelta(seconds=expiration),
