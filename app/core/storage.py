@@ -88,57 +88,57 @@ class StorageService:
             raise Exception(f"GCS upload failed: {str(e)}") from e
 
 
-@classmethod
-def generate_presigned_url(
-    cls,
-    file_key: str,
-    expiration: int = 3600,
-) -> str:
-    """
-    Generate a temporary signed URL for secure file download.
-    Works with both service account keys and Compute Engine credentials.
+    @classmethod
+    def generate_presigned_url(
+        cls,
+        file_key: str,
+        expiration: int = 3600,
+    ) -> str:
+        """
+        Generate a temporary signed URL for secure file download.
+        Works with both service account keys and Compute Engine credentials.
 
-    Returns:
-        str: Signed URL
-    Raises:
-        Exception: On failure
-    """
-    bucket = cls._get_bucket()
-    blob = bucket.blob(file_key)
+        Returns:
+            str: Signed URL
+        Raises:
+            Exception: On failure
+        """
+        bucket = cls._get_bucket()
+        blob = bucket.blob(file_key)
 
-    try:
-        import google.auth
-        from google.auth import compute_engine
+        try:
+            import google.auth
+            from google.auth import compute_engine
 
-        credentials, project = google.auth.default()
+            credentials, project = google.auth.default()
 
-        # For Compute Engine credentials, we need to use IAM signing
-        if isinstance(credentials, compute_engine.Credentials):
-            from google.auth import iam
-            from google.auth.transport import requests
+            # For Compute Engine credentials, we need to use IAM signing
+            if isinstance(credentials, compute_engine.Credentials):
+                from google.auth import iam
+                from google.auth.transport import requests
 
-            # Create a signing credentials object that uses the IAM API
-            signing_credentials = iam.Signer(
-                requests.Request(), credentials, credentials.service_account_email
-            )
+                # Create a signing credentials object that uses the IAM API
+                signing_credentials = iam.Signer(
+                    requests.Request(), credentials, credentials.service_account_email
+                )
 
-            url: str = blob.generate_signed_url(
-                version="v4",
-                expiration=timedelta(seconds=expiration),
-                method="GET",
-                credentials=signing_credentials,
-            )
-        else:
-            # Local development with service account key file
-            url: str = blob.generate_signed_url(
-                version="v4",
-                expiration=timedelta(seconds=expiration),
-                method="GET",
-            )
+                url: str = blob.generate_signed_url(
+                    version="v4",
+                    expiration=timedelta(seconds=expiration),
+                    method="GET",
+                    credentials=signing_credentials,
+                )
+            else:
+                # Local development with service account key file
+                url: str = blob.generate_signed_url(
+                    version="v4",
+                    expiration=timedelta(seconds=expiration),
+                    method="GET",
+                )
 
-        return url
-    except exceptions.GoogleAPIError as e:
-        raise Exception(f"Failed to generate signed URL: {str(e)}") from e
+            return url
+        except exceptions.GoogleAPIError as e:
+            raise Exception(f"Failed to generate signed URL: {str(e)}") from e
 
     @classmethod
     def file_exists(cls, file_key: str) -> bool:
