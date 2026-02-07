@@ -106,9 +106,11 @@ class StorageService:
 
         try:
             url: str = blob.generate_signed_url(
+                version="v4",  # ← REQUIRED on GCE
                 expiration=timedelta(seconds=expiration),
                 method="GET",
             )
+
             return url
         except exceptions.GoogleAPIError as e:
             raise Exception(f"Failed to generate signed URL: {str(e)}") from e
