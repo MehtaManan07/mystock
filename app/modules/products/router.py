@@ -4,7 +4,7 @@ Protected with role-based access control.
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, File, Query, UploadFile
 
 from app.core.response_interceptor import skip_interceptor
 from .service import ProductService
@@ -14,6 +14,9 @@ from .schemas import (
     UpdateProductDto,
     ProductResponse,
     ProductDetailResponse,
+    ProductImageResponse,
+    CopyFromProductDto,
+    ReorderImagesDto,
 )
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -128,3 +131,44 @@ async def delete_product(product_id: int):
     """Soft delete product"""
     await ProductService.remove(product_id)
     return {"message": "Product deleted successfully"}
+
+
+# --- Product images (must be after /{product_id} routes that don't have subpaths) ---
+
+@router.post("/{product_id}/images", response_model=List[ProductImageResponse])
+async def upload_product_images(product_id: int, files: List[UploadFile] = File(...)):
+    """Upload images for a product. Max 15 images per product, 10 MB per file. Accepts image/jpeg, image/png, image/webp."""
+    print(f"Uploading {len(files)} images for product {product_id}")
+    if not files:
+        return []
+    files_data = []
+    for f in files:
+        print(f"Processing file: {f.filename}")
+        content = await f.read()
+        content_type = f.content_type or "application/octet-stream"
+        filename = f.filename or "image"
+        files_data.append((content, content_type, filename))
+    return await ProductService.add_images(product_id, files_data)
+
+
+@router.post("/{product_id}/images/copy-from", response_model=List[ProductImageResponse])
+async def copy_product_images_from(product_id: int, dto: CopyFromProductDto):
+    """Copy images from another product. Send image_ids to copy only selected; omit to copy all."""
+    return await ProductService.copy_images_from(
+        product_id, dto.source_product_id, image_ids=dto.image_ids
+    )
+
+
+@router.delete("/{product_id}/images/{image_id}")
+@skip_interceptor
+async def delete_product_image(product_id: int, image_id: int):
+    """Remove an image from the product. Deletes from GCS only when no other product uses it."""
+    await ProductService.delete_image(product_id, image_id)
+    return {"message": "Image removed"}
+
+
+@router.patch("/{product_id}/images/reorder")
+async def reorder_product_images(product_id: int, dto: ReorderImagesDto):
+    """Reorder images. Body: { \"order\": [image_id1, image_id2, ...] }."""
+    await ProductService.reorder_images(product_id, dto.order)
+    return {"message": "Order updated"}

@@ -1,5 +1,5 @@
 from decimal import Decimal
-from sqlalchemy import String, Index, Numeric, Text, JSON
+from sqlalchemy import String, Index, Numeric, Text, JSON, Integer, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import TYPE_CHECKING, Optional, List, Dict, Any
 
@@ -9,6 +9,29 @@ if TYPE_CHECKING:
     from app.modules.container_products.models import ContainerProduct
     from app.modules.inventory_logs.models import InventoryLog
     from app.modules.vendor_product_skus.models import VendorProductSku
+
+
+class ProductImage(BaseModel):
+    """
+    Product image - stored in GCS, path in drive_file_id (blob path).
+    Same image can be reused across products (multiple rows, same drive_file_id).
+    """
+
+    __tablename__ = "product_image"
+
+    product_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("product.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    drive_file_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    url: Mapped[str] = mapped_column(String(1024), nullable=False)
+    thumb_url: Mapped[str] = mapped_column(String(1024), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # Relationships
+    product: Mapped["Product"] = relationship("Product", back_populates="images")
 
 
 class Product(BaseModel):
@@ -85,4 +108,11 @@ class Product(BaseModel):
 
     vendor_skus: Mapped[list["VendorProductSku"]] = relationship(
         "VendorProductSku", back_populates="product", cascade="all, delete-orphan"
+    )
+
+    images: Mapped[list["ProductImage"]] = relationship(
+        "ProductImage",
+        back_populates="product",
+        cascade="all, delete-orphan",
+        order_by=[ProductImage.sort_order],
     )

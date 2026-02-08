@@ -11,7 +11,7 @@ from app.core.db.engine import run_db
 from app.core.exceptions import NotFoundError
 
 from app.modules.products.schemas import CreateProductDto, CreateProductBulkDto, UpdateProductDto
-from app.modules.products.models import Product
+from app.modules.products.models import Product, ProductImage
 from app.modules.container_products.models import ContainerProduct
 from app.modules.inventory_logs.models import InventoryLog
 from app.modules.vendor_product_skus.models import VendorProductSku
@@ -190,6 +190,7 @@ class ProductService:
                     selectinload(Product.containers).selectinload(ContainerProduct.container),
                     selectinload(Product.logs).selectinload(InventoryLog.container),
                     selectinload(Product.vendor_skus).selectinload(VendorProductSku.vendor),
+                    selectinload(Product.images),
                 )
             )
 
@@ -212,6 +213,9 @@ class ProductService:
             
             # Filter out soft-deleted vendor SKUs
             active_vendor_skus = [vs for vs in product.vendor_skus if vs.deleted_at is None]
+
+            # Filter out soft-deleted images (ordered by sort_order already via relationship)
+            active_images = [img for img in product.images if img.deleted_at is None]
 
             # Sort logs by created_at DESC
             active_logs.sort(key=lambda x: x.created_at, reverse=True)
@@ -266,8 +270,155 @@ class ProductService:
                     }
                     for vs in active_vendor_skus
                 ],
+                "images": [
+                    {
+                        "id": img.id,
+                        "url": img.url,
+                        "thumb_url": img.thumb_url,
+                        "sort_order": img.sort_order,
+                    }
+                    for img in active_images
+                ],
             }
         return await run_db(_find_one)
+
+    @staticmethod
+    async def add_images(product_id: int, files_data: list[tuple[bytes, str, str]]) -> list[dict]:
+        """
+        Upload images for a product. Validates product exists and image count limit.
+        files_data: list of (bytes, content_type, filename).
+        Returns list of ProductImageResponse-like dicts.
+        """
+        from app.core.gcs_storage import upload_product_image
+        from app.core.exceptions import ValidationError
+
+        MAX_IMAGES = 15
+        MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+        ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
+
+        def _add(db: Session) -> list[dict]:
+            result = db.execute(select(Product).where(Product.id == product_id, Product.deleted_at.is_(None)))
+            product = result.scalar_one_or_none()
+            if not product:
+                raise NotFoundError("Product", product_id)
+            existing = db.execute(select(ProductImage).where(ProductImage.product_id == product_id, ProductImage.deleted_at.is_(None)))
+            current_count = len(existing.scalars().all())
+            if current_count + len(files_data) > MAX_IMAGES:
+                raise ValidationError(f"Product cannot have more than {MAX_IMAGES} images.")
+            created = []
+            next_order = current_count
+            for image_bytes, content_type, filename in files_data:
+                if len(image_bytes) > MAX_FILE_SIZE:
+                    raise ValidationError("File size exceeds 10 MB limit.")
+                if content_type not in ALLOWED_CONTENT_TYPES:
+                    raise ValidationError("Only image/jpeg, image/png, image/webp are allowed.")
+                storage_key, url, thumb_url = upload_product_image(product_id, image_bytes, content_type, filename or "image.jpg")
+                img = ProductImage(
+                    product_id=product_id,
+                    drive_file_id=storage_key,
+                    url=url,
+                    thumb_url=thumb_url,
+                    sort_order=next_order,
+                )
+                db.add(img)
+                db.flush()
+                db.refresh(img)
+                created.append({"id": img.id, "url": img.url, "thumb_url": img.thumb_url, "sort_order": img.sort_order})
+                next_order += 1
+            return created
+        return await run_db(_add)
+
+    @staticmethod
+    async def copy_images_from(product_id: int, source_product_id: int, image_ids: list[int] | None = None) -> list[dict]:
+        """Copy images from source product to current product. If image_ids given, copy only those; else copy all."""
+        from app.core.exceptions import ValidationError
+
+        MAX_IMAGES = 15
+
+        def _copy(db: Session) -> list[dict]:
+            result = db.execute(select(Product).where(Product.id == product_id, Product.deleted_at.is_(None)))
+            product = result.scalar_one_or_none()
+            if not product:
+                raise NotFoundError("Product", product_id)
+            src_result = db.execute(select(Product).where(Product.id == source_product_id, Product.deleted_at.is_(None)))
+            source = src_result.scalar_one_or_none()
+            if not source:
+                raise NotFoundError("Product", source_product_id)
+            if product_id == source_product_id:
+                raise ValidationError("Cannot copy images from the same product.")
+            existing = db.execute(select(ProductImage).where(ProductImage.product_id == product_id, ProductImage.deleted_at.is_(None)))
+            current_count = len(existing.scalars().all())
+            query = (
+                select(ProductImage)
+                .where(ProductImage.product_id == source_product_id, ProductImage.deleted_at.is_(None))
+                .order_by(ProductImage.sort_order)
+            )
+            if image_ids is not None:
+                if not image_ids:
+                    return []
+                query = query.where(ProductImage.id.in_(image_ids))
+            src_images = db.execute(query).scalars().all()
+            if current_count + len(src_images) > MAX_IMAGES:
+                raise ValidationError(f"Product cannot have more than {MAX_IMAGES} images.")
+            created = []
+            for idx, src in enumerate(src_images):
+                img = ProductImage(
+                    product_id=product_id,
+                    drive_file_id=src.drive_file_id,
+                    url=src.url,
+                    thumb_url=src.thumb_url,
+                    sort_order=current_count + idx,
+                )
+                db.add(img)
+                db.flush()
+                db.refresh(img)
+                created.append({"id": img.id, "url": img.url, "thumb_url": img.thumb_url, "sort_order": img.sort_order})
+            return created
+        return await run_db(_copy)
+
+    @staticmethod
+    async def delete_image(product_id: int, image_id: int) -> None:
+        """Delete one product image. Remove from GCS only if no other row references the blob."""
+        from app.core.gcs_storage import delete_file
+
+        def _delete(db: Session) -> None:
+            result = db.execute(
+                select(ProductImage).where(
+                    ProductImage.id == image_id,
+                    ProductImage.product_id == product_id,
+                    ProductImage.deleted_at.is_(None),
+                )
+            )
+            img = result.scalar_one_or_none()
+            if not img:
+                raise NotFoundError("ProductImage", image_id)
+            storage_key = img.drive_file_id
+            db.delete(img)
+            db.flush()
+            # Refcount: only delete from GCS if no other ProductImage references this blob
+            other = db.execute(select(ProductImage).where(ProductImage.drive_file_id == storage_key)).scalars().all()
+            if not other:
+                delete_file(storage_key)
+        await run_db(_delete)
+
+    @staticmethod
+    async def reorder_images(product_id: int, order: list[int]) -> None:
+        """Update sort_order for product images. order is list of image ids in desired order."""
+        from app.core.exceptions import ValidationError
+
+        def _reorder(db: Session) -> None:
+            result = db.execute(select(Product).where(Product.id == product_id, Product.deleted_at.is_(None)))
+            product = result.scalar_one_or_none()
+            if not product:
+                raise NotFoundError("Product", product_id)
+            images_result = db.execute(select(ProductImage).where(ProductImage.product_id == product_id, ProductImage.deleted_at.is_(None)))
+            images = {img.id: img for img in images_result.scalars().all()}
+            if set(order) != set(images.keys()):
+                raise ValidationError("Order must contain exactly the same image ids as the product.")
+            for idx, img_id in enumerate(order):
+                images[img_id].sort_order = idx
+            db.flush()
+        await run_db(_reorder)
 
     @staticmethod
     async def update(product_id: int, dto: UpdateProductDto) -> Product:

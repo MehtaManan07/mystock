@@ -166,6 +166,31 @@ class VendorSkuInfo(BaseModel):
         from_attributes = True
 
 
+class ProductImageResponse(BaseModel):
+    """Product image in detail response"""
+
+    id: int
+    url: str
+    thumb_url: str
+    sort_order: int
+
+    class Config:
+        from_attributes = True
+
+
+class CopyFromProductDto(BaseModel):
+    """DTO for copying images from another product. If image_ids omitted, copy all."""
+
+    source_product_id: int
+    image_ids: Optional[List[int]] = None  # If set, copy only these image IDs (from source product)
+
+
+class ReorderImagesDto(BaseModel):
+    """DTO for reordering product images"""
+
+    order: List[int]
+
+
 class ProductDetailResponse(BaseModel):
     """Detailed response model for Product entity with relationships"""
 
@@ -188,6 +213,7 @@ class ProductDetailResponse(BaseModel):
     containers: List[ContainerProductResponse]
     logs: List[LogResponse]
     vendor_skus: List[VendorSkuInfo] = []
+    images: List[ProductImageResponse] = []
 
     class Config:
         from_attributes = True
