@@ -24,6 +24,9 @@ engine = create_engine(
     turso_url,
     connect_args={"auth_token": settings.turso_auth_token},
     echo=False,
+    # Connection validation and pooling for Turso/libSQL HTTP streams
+    pool_pre_ping=True,  # Test connections before using them
+    pool_recycle=3600,   # Recycle connections after 1 hour
 )
 
 # Session factory
