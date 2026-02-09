@@ -4,7 +4,7 @@ Optimized queries with eager loading for relationships.
 """
 
 from typing import List, Optional, Dict
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, cast, String
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.db.engine import run_db
@@ -125,13 +125,25 @@ class ProductService:
                 )
             )
 
-            # Add search filter if provided
-            # Split search into words and require ALL words to match in name field
+            # Add search filter if provided.
+            # Split into words; each word must match in at least one searchable field
+            # (name, display_name, size, packing, company_sku, description, product_type, tags).
+            # e.g. "3.0 inch pagla" or "pagle 3.0 in" matches products with "pagla" in name and "3.0" in size, etc.
             if search:
-                words = search.strip().split()
+                words = [w.strip() for w in search.strip().split() if w.strip()]
                 for word in words:
                     word_pattern = f"%{word}%"
-                    query = query.where(Product.name.ilike(word_pattern))
+                    word_matches_any_field = or_(
+                        Product.name.ilike(word_pattern),
+                        Product.display_name.ilike(word_pattern),
+                        Product.size.ilike(word_pattern),
+                        Product.packing.ilike(word_pattern),
+                        Product.company_sku.ilike(word_pattern),
+                        Product.description.ilike(word_pattern),
+                        Product.product_type.ilike(word_pattern),
+                        cast(Product.tags, String).ilike(word_pattern),
+                    )
+                    query = query.where(word_matches_any_field)
 
             # Order by created_at DESC
             query = query.order_by(Product.created_at.desc())
