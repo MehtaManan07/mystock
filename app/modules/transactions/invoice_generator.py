@@ -110,107 +110,160 @@ class InvoiceGenerator:
                 lines.append(" ".join(current_line))
             
             return lines if lines else [text]
-        
+
+        def extract_state_from_gstin(gstin: str) -> tuple:
+            """
+            Extract state code and name from GSTIN.
+            Returns tuple of (state_name, state_code).
+            """
+            if not gstin or len(gstin) < 2:
+                return ("Not Specified", "00")
+
+            state_code = gstin[:2]
+
+            # Mapping of GST state codes to state names
+            state_map = {
+                "01": "Jammu and Kashmir",
+                "02": "Himachal Pradesh",
+                "03": "Punjab",
+                "04": "Chandigarh",
+                "05": "Uttarakhand",
+                "06": "Haryana",
+                "07": "Delhi",
+                "08": "Rajasthan",
+                "09": "Uttar Pradesh",
+                "10": "Bihar",
+                "11": "Sikkim",
+                "12": "Arunachal Pradesh",
+                "13": "Nagaland",
+                "14": "Manipur",
+                "15": "Mizoram",
+                "16": "Tripura",
+                "17": "Meghalaya",
+                "18": "Assam",
+                "19": "West Bengal",
+                "20": "Jharkhand",
+                "21": "Odisha",
+                "22": "Chhattisgarh",
+                "23": "Madhya Pradesh",
+                "24": "Gujarat",
+                "25": "Daman and Diu",
+                "26": "Dadra and Nagar Haveli",
+                "27": "Maharashtra",
+                "29": "Karnataka",
+                "30": "Goa",
+                "32": "Kerala",
+                "33": "Tamil Nadu",
+                "34": "Puducherry",
+                "36": "Telangana",
+                "37": "Andhra Pradesh",
+            }
+
+            state_name = state_map.get(state_code, "Unknown")
+            return (state_name, state_code)
+
         def draw_header(c, is_first_page=True):
-            """Draw the header section"""
+            """Draw the header section with updated layout"""
             y = top_margin
-            
+
             # ---------- HEADER SECTION ----------
-            # Seller details (left side)
-            c.setFont("DejaVuSans-Bold", 11)
-            c.drawString(left_margin, y, f"Name : {company_settings.seller_name}")
-            y -= 15
-            
-            c.setFont("DejaVuSans", 10)
-            c.drawString(left_margin, y, f"Phone : {company_settings.seller_phone}")
-            y -= 15
-            
-            c.drawString(left_margin, y, f"Email : {company_settings.seller_email}")
-            y -= 15
-            
-            c.drawString(left_margin, y, f"GSTIN : {company_settings.seller_gstin}")
+            # Company name prominent at top (14pt bold, uppercase)
+            c.setFont("DejaVuSans-Bold", 14)
+            c.drawString(left_margin, y, company_settings.company_name.upper())
+            y -= 18
+
+            # Company address (3 lines, 9pt)
+            c.setFont("DejaVuSans", 9)
+            c.drawString(left_margin, y, company_settings.company_address_line1)
+            y -= 12
+            c.drawString(left_margin, y, company_settings.company_address_line2)
+            y -= 12
+            c.drawString(left_margin, y, company_settings.company_address_line3)
+            y -= 18
+
+            # Extract seller state from GSTIN
+            seller_state_name, seller_state_code = extract_state_from_gstin(company_settings.seller_gstin)
+
+            # GSTIN/UIN and State on one line
+            c.setFont("DejaVuSans", 9)
+            c.drawString(left_margin, y, f"GSTIN/UIN: {company_settings.seller_gstin}")
+            c.drawString(left_margin + 200, y, f"Phone: {company_settings.seller_phone}")
+            y -= 12
+
+            # State information and Email
+            c.drawString(left_margin, y, f"State Name: {seller_state_name}, Code: {seller_state_code}")
+            c.drawString(left_margin + 200, y, f"Email: {company_settings.seller_email}")
             y -= 25
-            
-            # TAX INVOICE header (right side, aligned with seller details)
+
+            # TAX INVOICE header (right side, aligned at top)
             c.setFont("DejaVuSans-Bold", 12)
             invoice_text = "TAX INVOICE"
             invoice_width = c.stringWidth(invoice_text, "DejaVuSans-Bold", 12)
             c.drawString(right_margin - invoice_width, top_margin, invoice_text)
-            
+
             c.setFont("DejaVuSans", 9)
             original_text = "ORIGINAL FOR RECIPIENT"
             original_width = c.stringWidth(original_text, "DejaVuSans", 9)
             c.drawString(right_margin - original_width, top_margin - 15, original_text)
             
             if is_first_page:
-                # ---------- CUSTOMER DETAILS SECTION ----------
+                # ---------- BUYER DETAILS SECTION ----------
                 y -= 5
-                
-                # Customer Detail heading with border
+
+                # "Buyer (Bill to)" heading with border
                 c.setFont("DejaVuSans-Bold", 10)
                 c.setFillColor(colors.lightgrey)
                 c.rect(left_margin, y - 15, right_margin - left_margin, 18, fill=1, stroke=1)
                 c.setFillColor(colors.black)
-                c.drawString(left_margin + 5, y - 10, "Customer Detail")
+                c.drawString(left_margin + 5, y - 10, "Buyer (Bill to)")
                 y -= 25
-                
-                # Customer information
+
+                # Buyer information
                 c.setFont("DejaVuSans-Bold", 10)
                 c.drawString(left_margin, y, f"M/S {transaction.contact.name}")
                 y -= 15
-                
+
                 c.setFont("DejaVuSans", 9)
                 # Handle None address with text wrapping
                 customer_address = transaction.contact.address or "-"
-                address_text = f"Address {customer_address}"
                 # Calculate available width for address (leave some margin)
                 available_width = right_margin - left_margin - 20
-                address_lines = wrap_text(address_text, available_width, "DejaVuSans", 9)
-                
+                address_lines = wrap_text(customer_address, available_width, "DejaVuSans", 9)
+
                 for line in address_lines:
                     c.drawString(left_margin, y, line)
                     y -= 13
-                
-                # Handle None phone
-                customer_phone = transaction.contact.phone or "-"
-                c.drawString(left_margin, y, f"Phone {customer_phone}")
-                y -= 13
-                
+
                 # Handle None GSTIN
                 customer_gstin = transaction.contact.gstin or "-"
-                c.drawString(left_margin, y, f"GSTIN {customer_gstin}")
+                c.drawString(left_margin, y, f"GSTIN/UIN: {customer_gstin}")
+                y -= 13
+
+                # Extract and display buyer state information
+                buyer_state_name, buyer_state_code = extract_state_from_gstin(customer_gstin if customer_gstin != "-" else "")
+                c.drawString(left_margin, y, f"State Name: {buyer_state_name}, Code: {buyer_state_code}")
+                y -= 13
+
+                # Handle None phone
+                customer_phone = transaction.contact.phone or "-"
+                c.drawString(left_margin, y, f"Phone: {customer_phone}")
                 y -= 20
-                
-                # ---------- COMPANY DETAILS (Small box) ----------
-                c.setFont("DejaVuSans-Bold", 9)
-                c.drawString(left_margin, y, company_settings.company_name)
-                y -= 12
-                
-                c.setFont("DejaVuSans", 8)
-                c.drawString(left_margin, y, company_settings.company_address_line1)
-                y -= 10
-                
-                c.drawString(left_margin, y, company_settings.company_address_line2)
-                y -= 10
-                
-                c.drawString(left_margin, y, company_settings.company_address_line3)
-                y -= 20
-                
+
                 # ---------- INVOICE INFO ----------
                 # Draw these on the right side
-                invoice_y = y + 60  # Position relative to customer details
-                
+                invoice_y = y + 40  # Position relative to buyer details
+
                 c.setFont("DejaVuSans", 9)
                 invoice_no = transaction.transaction_number
                 invoice_date = format_invoice_date(transaction.transaction_date)
                 due_date_obj = calculate_due_date(transaction.transaction_date)
                 due_date = format_invoice_date(due_date_obj)
-                
-                c.drawString(right_margin - 250, invoice_y, f"Invoice No. {invoice_no}")
-                c.drawString(right_margin - 120, invoice_y, f"Invoice Date {invoice_date}")
+
+                c.drawString(right_margin - 250, invoice_y, f"Invoice No.: {invoice_no}")
+                c.drawString(right_margin - 120, invoice_y, f"Dated: {invoice_date}")
                 invoice_y -= 15
-                
-                c.drawString(right_margin - 250, invoice_y, f"Due Date {due_date}")
+
+                c.drawString(right_margin - 250, invoice_y, f"Due Date: {due_date}")
                 
                 y -= 20
             
