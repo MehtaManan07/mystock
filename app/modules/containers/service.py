@@ -5,10 +5,11 @@ Optimized queries with eager loading for relationships.
 
 import re
 from typing import List, Optional
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.db.engine import run_db
+from app.core.pagination import paginate_query, build_paginated_response
 from app.core.exceptions import NotFoundError
 from .models import ContainerType, Container
 from .schemas import CreateContainerDto, CreateContainerBulkDto, UpdateContainerDto
@@ -137,6 +138,70 @@ class ContainerService:
                 for container in containers
             ]
         return await run_db(_find_all)
+
+    @staticmethod
+    async def find_all_paginated(
+        page: int = 1,
+        page_size: int = 25,
+        search: Optional[str] = None,
+    ) -> dict:
+        """
+        Find all containers with pagination and optional search filter.
+
+        CRITICAL: Search filtering happens BEFORE pagination.
+        This ensures the total count and pages reflect filtered results.
+
+        Sorting: Extracts numeric values from container names and sorts DESC.
+        Done in Python for database compatibility.
+
+        Args:
+            page: Page number (1-indexed, default 1)
+            page_size: Items per page (default 25)
+            search: Optional search string to filter by name
+
+        Returns:
+            Dict with keys: items, total, page, page_size, total_pages, has_more
+        """
+        def _find_all_paginated(db: Session) -> dict:
+            # Build base query with eager loading
+            query = (
+                select(Container)
+                .where(Container.deleted_at.is_(None))
+                .options(selectinload(Container.contents))
+            )
+
+            # Apply search filter BEFORE pagination
+            if search:
+                search_pattern = f"%{search}%"
+                query = query.where(Container.name.ilike(search_pattern))
+
+            # Paginate: returns (items, total_count)
+            containers, total = paginate_query(db, query, page, page_size)
+
+            # Sort in Python: Extract numbers from name and sort DESC
+            # Each page is sorted independently (existing behavior)
+            containers = list(containers)
+            containers.sort(key=lambda c: extract_number_from_name(c.name), reverse=True)
+
+            # Map to response format with productCount
+            items = [
+                {
+                    "id": container.id,
+                    "name": container.name,
+                    "type": container.type.value,
+                    "deleted_at": container.deleted_at,
+                    "created_at": container.created_at,
+                    "updated_at": container.updated_at,
+                    "productCount": sum(
+                        1 for cp in container.contents if cp.deleted_at is None
+                    ),
+                }
+                for container in containers
+            ]
+
+            return build_paginated_response(items, total, page, page_size)
+
+        return await run_db(_find_all_paginated)
 
     @staticmethod
     async def find_one_formatted(container_id: int) -> dict:

@@ -4,10 +4,11 @@ Optimized queries with eager loading for relationships.
 """
 
 from typing import List, Optional, Dict
-from sqlalchemy import select, or_, cast, String
+from sqlalchemy import select, or_, cast, String, func
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.db.engine import run_db
+from app.core.pagination import paginate_query, build_paginated_response
 from app.core.exceptions import NotFoundError
 
 from app.modules.products.schemas import CreateProductDto, CreateProductBulkDto, UpdateProductDto
@@ -177,6 +178,90 @@ class ProductService:
                 for product in products
             ]
         return await run_db(_find_all)
+
+    @staticmethod
+    async def find_all_paginated(
+        page: int = 1,
+        page_size: int = 25,
+        search: Optional[str] = None,
+    ) -> dict:
+        """
+        Find all products with pagination and optional search filter.
+
+        CRITICAL: Search filtering happens BEFORE pagination.
+        This ensures the total count and pages reflect filtered results.
+
+        Args:
+            page: Page number (1-indexed, default 1)
+            page_size: Items per page (default 25)
+            search: Optional search string to filter by name, size, packing, etc.
+
+        Returns:
+            Dict with keys: items, total, page, page_size, total_pages, has_more
+        """
+        def _find_all_paginated(db: Session) -> dict:
+            # Build query with eager loading
+            query = (
+                select(Product)
+                .where(Product.deleted_at.is_(None))
+                .options(
+                    selectinload(Product.containers).selectinload(ContainerProduct.container)
+                )
+            )
+
+            # Apply search filter BEFORE pagination
+            # Split into words; each word must match in at least one searchable field
+            if search:
+                words = [w.strip() for w in search.strip().split() if w.strip()]
+                for word in words:
+                    word_pattern = f"%{word}%"
+                    word_matches_any_field = or_(
+                        Product.name.ilike(word_pattern),
+                        Product.display_name.ilike(word_pattern),
+                        Product.size.ilike(word_pattern),
+                        Product.packing.ilike(word_pattern),
+                        Product.company_sku.ilike(word_pattern),
+                        Product.description.ilike(word_pattern),
+                        Product.product_type.ilike(word_pattern),
+                        cast(Product.tags, String).ilike(word_pattern),
+                    )
+                    query = query.where(word_matches_any_field)
+
+            # Order by created_at DESC
+            query = query.order_by(Product.created_at.desc())
+
+            # Paginate: returns (items, total_count)
+            products, total = paginate_query(db, query, page, page_size)
+
+            # Map to response format with totalQuantity
+            items = [
+                {
+                    "id": product.id,
+                    "name": product.name,
+                    "size": product.size,
+                    "packing": product.packing,
+                    "company_sku": product.company_sku,
+                    "default_sale_price": product.default_sale_price,
+                    "default_purchase_price": product.default_purchase_price,
+                    "display_name": product.display_name,
+                    "description": product.description,
+                    "mrp": product.mrp,
+                    "tags": product.tags,
+                    "product_type": product.product_type,
+                    "dimensions": product.dimensions,
+                    "deleted_at": product.deleted_at,
+                    "created_at": product.created_at,
+                    "updated_at": product.updated_at,
+                    "totalQuantity": sum(
+                        cp.quantity for cp in product.containers if cp.deleted_at is None
+                    ),
+                }
+                for product in products
+            ]
+
+            return build_paginated_response(items, total, page, page_size)
+
+        return await run_db(_find_all_paginated)
 
     @staticmethod
     async def find_one(product_id: int) -> dict:

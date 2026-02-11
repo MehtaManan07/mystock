@@ -15,6 +15,7 @@ from .schemas import (
     ProductResponse,
     ProductDetailResponse,
     ProductImageResponse,
+    ProductPaginatedResponse,
     CopyFromProductDto,
     ReorderImagesDto,
 )
@@ -79,16 +80,35 @@ async def bulk_create_products(data: CreateProductBulkDto):
     ]
 
 
-@router.get("", response_model=List[ProductResponse])
+@router.get("", response_model=ProductPaginatedResponse)
 async def get_all_products(
-    search: Optional[str] = Query(None, description="Search by name, size, or packing"),
+    search: Optional[str] = Query(None, description="Search by name, size, packing, SKU, etc."),
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(25, ge=1, le=100, description="Items per page (max 100)"),
 ):
     """
-    Get all products with optional search filter.
-    Returns products with totalQuantity computed from containers.
+    Get all products with pagination and optional search filter.
+    Search filtering is applied server-side before pagination.
+
+    Query Parameters:
+        - search: Optional search term (multi-word supported)
+        - page: Page number starting from 1
+        - page_size: Number of items per page (default 25, max 100)
+
+    Response includes:
+        - items: List of products for current page
+        - total: Total number of products matching search
+        - page: Current page number
+        - page_size: Items per page
+        - total_pages: Total pages available
+        - has_more: Boolean indicating if more pages exist
     """
-    products = await ProductService.find_all(search)
-    return products
+    result = await ProductService.find_all_paginated(
+        page=page,
+        page_size=page_size,
+        search=search,
+    )
+    return result
 
 
 @router.get("/{product_id}", response_model=ProductDetailResponse)

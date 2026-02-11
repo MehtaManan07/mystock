@@ -14,6 +14,7 @@ from .schemas import (
     UpdateContainerDto,
     ContainerResponse,
     ContainerDetailResponse,
+    ContainerPaginatedResponse,
 )
 
 router = APIRouter(prefix="/containers", tags=["containers"])
@@ -56,19 +57,6 @@ async def bulk_create_containers(data: CreateContainerBulkDto):
     ]
 
 
-@router.get("", response_model=List[ContainerResponse])
-async def get_all_containers(
-    search: Optional[str] = Query(None, description="Search by name"),
-):
-    """
-    Get all containers with optional search filter.
-    Returns containers with productCount computed from container_products.
-    Sorted by numeric value extracted from name (DESC).
-    """
-    containers = await ContainerService.find_all(search)
-    return containers
-
-
 @router.get("/special/loose-stock", response_model=ContainerResponse)
 async def get_loose_stock_container():
     """
@@ -92,6 +80,39 @@ async def get_loose_stock_container():
         updated_at=container.updated_at,
         productCount=product_count,
     )
+
+
+@router.get("", response_model=ContainerPaginatedResponse)
+async def get_all_containers(
+    search: Optional[str] = Query(None, description="Search by container name"),
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(25, ge=1, le=100, description="Items per page (max 100)"),
+):
+    """
+    Get all containers with pagination and optional search filter.
+    Search filtering is applied server-side before pagination.
+
+    Containers are sorted by numeric value extracted from name (DESC) within each page.
+
+    Query Parameters:
+        - search: Optional search term
+        - page: Page number starting from 1
+        - page_size: Number of items per page (default 25, max 100)
+
+    Response includes:
+        - items: List of containers for current page
+        - total: Total number of containers matching search
+        - page: Current page number
+        - page_size: Items per page
+        - total_pages: Total pages available
+        - has_more: Boolean indicating if more pages exist
+    """
+    result = await ContainerService.find_all_paginated(
+        page=page,
+        page_size=page_size,
+        search=search,
+    )
+    return result
 
 
 @router.get("/{container_id}", response_model=ContainerDetailResponse)

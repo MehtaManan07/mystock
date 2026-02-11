@@ -114,3 +114,17 @@ class ContainerDetailResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
+class ContainerPaginatedResponse(BaseModel):
+    """Paginated response for containers list"""
+
+    items: List[ContainerResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    has_more: bool
+
+    class Config:
+        from_attributes = True
+

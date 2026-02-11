@@ -218,3 +218,17 @@ class ProductDetailResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
+class ProductPaginatedResponse(BaseModel):
+    """Paginated response for products list"""
+
+    items: List[ProductResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    has_more: bool
+
+    class Config:
+        from_attributes = True
+
