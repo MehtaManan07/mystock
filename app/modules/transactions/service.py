@@ -388,13 +388,18 @@ class TransactionsService:
             if not transaction_data.payment_method:
                 raise ValidationError("Payment method required when paid_amount > 0")
 
+            # Derive payment type from transaction type
+            payment_type = 'income' if transaction_type == TransactionType.sale else 'expense'
+
             payment = Payment(
                 transaction_id=transaction.id,
                 payment_date=transaction_data.transaction_date,
                 amount=transaction_data.paid_amount,
                 payment_method=transaction_data.payment_method,
                 reference_number=transaction_data.payment_reference,
-                notes=f"Payment for {transaction_type.value} {transaction_number}",
+                description=f"Payment for {transaction_type.value} {transaction_number}",  # Payment model uses 'description', not 'notes'
+                type=payment_type,
+                category="transaction_payment",
             )
             db.add(payment)
 
@@ -444,13 +449,18 @@ class TransactionsService:
                 )
 
             # STEP 4: Create payment record
+            # Derive payment type from transaction type
+            payment_type = 'income' if transaction.type == TransactionType.sale else 'expense'
+
             payment = Payment(
                 transaction_id=transaction.id,
                 payment_date=payment_data.payment_date,
                 amount=payment_data.amount,
                 payment_method=payment_data.payment_method,
                 reference_number=payment_data.reference_number,
-                notes=payment_data.notes,
+                description=payment_data.notes,  # Payment model uses 'description', not 'notes'
+                type=payment_type,
+                category="transaction_payment",
             )
             db.add(payment)
 
