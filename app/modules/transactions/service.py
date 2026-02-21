@@ -6,6 +6,7 @@ Handles inventory updates, payment tracking, and contact balance management.
 from typing import List, Optional, Dict, Tuple, cast, Union
 from datetime import date
 from decimal import Decimal
+import math
 from sqlalchemy import select, func, desc, tuple_
 from sqlalchemy.orm import Session, selectinload
 
@@ -281,7 +282,9 @@ class TransactionsService:
 
         # STEP 4: Calculate Totals
         subtotal = sum(item.quantity * item.unit_price for item in transaction_data.items)
-        total_amount = subtotal + transaction_data.tax_amount - transaction_data.discount_amount
+        # Calculate total and round up to nearest whole number
+        total_before_rounding = subtotal + transaction_data.tax_amount - transaction_data.discount_amount
+        total_amount = Decimal(math.ceil(float(total_before_rounding)))
 
         if transaction_data.paid_amount > total_amount:
             raise ValidationError(
