@@ -95,7 +95,7 @@ class DashboardService:
                 .order_by(desc(Transaction.transaction_date), desc(Transaction.id))
                 .limit(5)
             )
-            recent_txns = db.execute(recent_txns_query).scalars().all()
+            recent_txns = db.execute(recent_txns_query).unique().scalars().all()
             
             recent_transactions = [
                 DashboardTransactionResponse(
