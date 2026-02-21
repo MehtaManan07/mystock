@@ -21,6 +21,7 @@ from app.modules.inventory_logs.models import InventoryLog
 from app.modules.contacts.models import Contact
 from app.modules.transactions.models import Transaction, TransactionItem
 from app.modules.payments.models import Payment
+from app.modules.drafts.models import Draft
 
 # Load .env
 load_dotenv()
