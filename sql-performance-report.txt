@@ -1,0 +1,159 @@
+# SQL PERFORMANCE ANALYSIS REPORT
+# Generated: mystock
+
+## FUNCTION-LEVEL METRICS
+service,function,line_start,line_end,db_execute,selects,inserts,updates,deletes,filters,eagerloads,sorts,aggregations,joins,loop_risks,n_plus_1_risk,est_roundtrips,cost_score,priority_score
+drafts,_get_complete,188,311,5,5,0,0,0,7,0,0,0,0,2,8,5,72,64
+payments,_update,240,354,7,7,0,3,0,7,0,0,2,0,0,3,10,46,38
+transactions,_create_transaction,215,416,1,1,5,2,0,2,0,0,0,0,1,3,8,27,26
+products,_copy,435,473,4,4,1,1,0,6,0,1,0,0,0,2,6,26,14
+container_products,_get_basic_analytics,300,326,3,3,0,0,0,3,0,0,6,0,0,2,3,30,12
+payments,_create,46,117,3,3,1,2,0,3,0,0,0,0,0,2,6,18,12
+dashboard,_get_dashboard,39,143,2,8,0,0,0,8,1,2,13,0,0,0,8,39,7
+payments,_remove,371,403,2,2,0,1,0,2,0,0,0,0,0,0,3,12,4
+products,_add,396,425,2,2,1,1,0,2,0,0,0,0,0,0,4,12,4
+products,_delete,481,498,2,2,0,1,1,2,0,0,0,0,0,0,4,12,4
+products,_reorder,506,517,2,2,0,1,0,2,0,0,0,0,0,0,3,12,4
+contacts,_find_all,52,75,1,1,0,0,0,8,0,0,0,0,0,0,1,13,2
+contacts,_find_one,87,98,1,1,0,0,0,1,0,0,0,0,0,0,1,6,2
+contacts,_update,117,139,1,1,0,2,0,1,0,0,0,0,0,0,3,6,2
+contacts,_remove,154,168,1,1,0,1,0,1,0,0,0,0,0,0,2,6,2
+contacts,_validate,186,203,1,1,0,0,0,1,0,0,0,0,0,0,1,6,2
+contacts,_validate,221,238,1,1,0,0,0,1,0,0,0,0,0,0,1,6,2
+container_products,_verify_product_location,167,183,1,1,0,1,0,1,0,0,0,0,0,0,2,6,2
+container_products,_get_total_quantity_of_sku,277,289,1,1,0,0,0,1,0,0,2,0,0,0,1,10,2
+container_products,_map_products_to_ids,341,371,1,0,0,0,0,0,0,0,0,1,0,0,1,8,2
+container_products,_validate_and_get_stock,391,415,1,1,0,0,0,2,0,0,0,0,0,0,1,7,2
+containers,_bulk_create,67,86,1,1,1,1,0,2,0,0,0,0,0,0,3,7,2
+containers,_update,306,328,1,1,0,3,0,1,0,0,0,0,0,0,4,6,2
+containers,_remove,343,353,1,1,0,1,0,1,0,0,0,0,0,0,2,6,2
+containers,_get_loose_stock,404,410,1,1,0,0,0,1,0,0,0,0,0,0,1,6,2
+drafts,_find_all,62,71,1,1,0,0,0,2,0,1,0,0,0,0,1,7,2
+drafts,_find_one,90,101,1,1,0,0,0,1,0,0,0,0,0,0,1,6,2
+drafts,_update,121,140,1,1,0,1,0,1,0,0,0,0,0,0,2,6,2
+drafts,_delete,156,168,1,1,0,1,1,1,0,0,0,0,0,0,3,6,2
+payments,_find_all,135,187,1,1,0,0,0,13,0,1,0,0,0,0,1,18,2
+payments,_find_one,205,217,1,1,0,0,0,1,0,0,0,0,0,0,1,6,2
+payments,_get_summary,422,474,1,1,0,0,0,3,0,0,4,0,0,0,1,16,2
+payments,_get_distinct_categories,485,511,1,1,0,0,0,1,0,0,0,0,0,0,1,6,2
+products,_bulk_create,71,103,1,1,1,1,0,2,0,0,0,0,0,0,3,7,2
+products,_update,536,554,1,1,0,2,0,1,0,0,0,0,0,0,3,6,2
+products,_remove,569,579,1,1,0,1,0,1,0,0,0,0,0,0,2,6,2
+products,_validate,597,616,1,1,0,0,0,2,0,0,0,0,0,0,1,7,2
+settings,_get_active,27,39,1,1,0,0,0,1,0,0,0,0,0,0,1,6,2
+settings,_update,59,80,1,1,0,2,0,1,0,0,0,0,0,0,3,6,2
+settings,_create,93,112,1,1,1,1,0,1,0,0,0,0,0,0,3,6,2
+transactions,_validate_contact_for_sale,49,67,1,1,0,0,0,1,0,0,0,0,0,0,1,6,2
+transactions,_validate_contact_for_purchase,70,88,1,1,0,0,0,1,0,0,0,0,0,0,1,6,2
+transactions,_validate_products_exist,91,108,1,1,0,0,0,2,0,0,0,0,0,0,1,7,2
+transactions,_validate_and_get_stock,111,135,1,1,0,0,0,2,0,0,0,0,0,0,1,7,2
+transactions,_generate_transaction_number,143,168,1,1,0,0,0,1,0,1,0,0,0,0,1,6,2
+users,_create,48,82,1,1,1,1,0,1,0,0,0,0,0,0,3,6,2
+users,_find_all,122,125,1,1,0,0,0,0,0,0,0,0,0,0,1,5,2
+users,_find_one,137,146,1,1,0,0,0,1,0,0,0,0,0,0,1,6,2
+users,_find_by_role,158,163,1,1,0,0,0,2,0,0,0,0,0,0,1,7,2
+users,_find_assigned_tasks,175,184,1,1,0,0,0,1,0,0,0,0,0,0,1,6,2
+users,_find_me,196,203,1,1,0,0,0,1,0,0,0,0,0,0,1,6,2
+users,_update,216,229,1,1,0,2,0,1,0,0,0,0,0,0,3,6,2
+users,_remove,241,249,1,1,0,1,0,1,0,0,0,0,0,0,2,6,2
+contacts,update_balance,242,251,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+contacts,_create,35,40,0,0,1,1,0,0,0,0,0,0,0,0,2,0,0
+containers,extract_number_from_name,20,24,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+containers,_create,47,52,0,0,1,1,0,0,0,0,0,0,0,0,2,0,0
+containers,_find_all,105,139,1,1,0,0,0,3,1,0,0,0,0,0,1,3,0
+containers,_ensure_loose_stock,368,393,1,1,1,1,0,1,1,0,0,0,0,0,3,1,0
+drafts,_create,36,46,0,0,1,1,0,0,0,0,0,0,0,0,2,0,0
+inventory_logs,_create_log,33,38,0,0,1,1,0,0,0,0,0,0,0,0,2,0,0
+products,_create,38,56,0,0,1,1,0,0,0,0,0,0,0,0,2,0,0
+transactions,_update_contact_balance,138,140,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+transactions,_create_sale,187,190,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+transactions,_create_purchase,208,211,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+transactions,_record_payment,424,492,1,1,1,1,0,1,1,0,0,0,0,0,3,1,0
+users,_get_user_response,32,41,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+users,_login,90,113,0,1,0,0,0,1,0,0,0,0,0,0,1,1,0
+vendor_product_skus,_create,26,61,0,0,1,1,0,0,0,0,0,0,0,0,2,0,0
+vendor_product_skus,_update,70,88,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0
+vendor_product_skus,_get,129,147,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+vendor_product_skus,_delete,154,172,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0
+container_products,_set_products_in_container,49,151,1,1,2,3,0,2,2,0,0,0,0,0,6,0,-2
+container_products,_get_products_in_container,197,210,1,1,0,0,0,1,2,1,0,1,0,0,1,0,-2
+container_products,_get_containers_for_product,224,237,1,1,0,0,0,1,2,1,0,1,0,0,1,0,-2
+container_products,_search_containers_by_sku,251,263,1,1,0,0,0,2,2,0,0,1,0,0,1,0,-2
+containers,_find_all_paginated,165,202,0,1,0,0,0,3,1,0,0,0,0,0,1,0,-2
+inventory_logs,_create_logs_bulk,53,74,1,1,1,1,0,2,2,0,0,0,0,0,3,0,-2
+inventory_logs,_get_logs_for_product,89,105,1,1,0,0,0,1,2,1,0,0,0,0,1,0,-2
+inventory_logs,_get_logs_for_container,120,136,1,1,0,0,0,1,2,1,0,0,0,0,1,0,-2
+inventory_logs,_get_all_logs,148,161,1,1,0,0,0,1,2,1,0,0,0,0,1,0,-2
+products,_find_all,119,179,1,1,0,0,0,10,2,1,0,0,0,0,1,5,-2
+transactions,_delete_transaction,568,641,2,2,0,1,0,3,3,0,0,0,0,0,3,0,-2
+vendor_product_skus,_get_all,95,119,0,0,0,0,0,0,1,0,0,0,0,0,0,0,-2
+products,_find_all_paginated,202,262,0,1,0,0,0,10,2,1,0,0,0,0,1,0,-4
+containers,_find_one_formatted,221,287,1,1,0,0,0,1,4,0,0,0,0,0,1,0,-6
+transactions,_get_transaction,500,518,1,1,0,0,0,1,6,0,0,0,0,0,1,0,-10
+transactions,_list_transactions,526,560,1,1,0,0,0,9,6,1,0,0,0,0,1,0,-10
+products,_find_one,281,379,1,1,0,0,0,1,7,0,0,0,0,0,1,0,-12
+
+## SERVICE-LEVEL AGGREGATES
+service,functions,db_execute,selects,inserts,updates,deletes,filters,eagerloads,sorts,aggregations,joins,loop_risks,avg_cost,max_priority
+drafts,6,9,9,1,3,1,12,0,1,0,0,2,16.2,64
+payments,7,16,16,1,6,0,30,0,1,6,0,0,17.4,38
+transactions,13,11,11,6,4,0,23,16,2,0,0,1,4.6,26
+products,12,16,17,4,9,1,39,11,3,0,0,0,7.8,14
+container_products,9,11,10,2,4,0,13,8,2,8,4,0,6.8,12
+dashboard,1,2,8,0,0,0,8,1,2,13,0,0,39.0,7
+contacts,8,6,6,1,4,0,13,0,0,0,0,0,5.4,2
+containers,10,7,8,3,7,0,13,7,0,0,0,0,2.9,2
+settings,3,3,3,1,3,0,3,0,0,0,0,0,6.0,2
+users,10,8,9,1,4,0,9,0,0,0,0,0,4.9,2
+inventory_logs,5,4,4,2,2,0,5,8,3,0,0,0,0.0,0
+vendor_product_skus,5,0,0,1,3,0,0,1,0,0,0,0,0.0,0
+
+## GLOBAL AGGREGATES
+metric,value
+total_services,12
+total_functions,89
+total_db_execute_calls,93
+total_selects,101
+total_inserts,23
+total_updates,49
+total_deletes,2
+total_filters,168
+total_eagerloads,52
+total_sorts,14
+total_aggregations,27
+total_joins,4
+total_loop_risks,3
+global_avg_cost_score,9.2
+global_max_priority,64
+
+
+SKU	SUM OFF QTY
+whl239_73301_swg_wh_rdgld_6	1
+whl239_73303_swg_wh_rdgld_12	1
+whl239_73306_kl_wh_rdgld_6	1
+whl239_73312_mnd_wh_grnylw_12	1
+whl239_73313_mnd_tbl_dkgrn_pea	1
+whl239_73318_hld_wh_ylwgld_6	1
+whl239_73323_mmr_wh_rdgld_12	1
+whl239_73327_gan_diya_stnd_pnk_3	1
+whl239_73329_rng_stn_lot_12	8
+whl239_73330_rng_stn_om_12	10
+whl239_73331_rng_stn_sun_12	11
+whl239_73332_rng_stn_bird_12x8	4
+whl239_73333_rng_stn_diyatree_12x8	4
+whl239_73334_lc_mdf_4p5_2lyr	12
+whl239_73335_rng_stn_flwr_12	2
+whl239_73336_rng_stn_mndl_12	5
+whl239_73337_rng_stn_big_petal_12	1
+whl239_73339_rng_stn_round_petal_4	5
+whl239_73340_rng_stn_8_petal_4	1
+whl239_73341_rng_stn_8_petal_6	4
+whl239_73342_rng_stn_mndl_16	6
+whl239_73349_sl_real_acr_bc_4	9
+whl239_73350_sl_satin_bc_org_3x5	1
+whl239_73351_sl_satin_bc_red_3x5	1
+whl239_73352_sl_satin_bc_grn_3x5	1
+whl239_73353_sl_mdf_foam_diya_4	1
+whl239_73354_ssk_real_acr_bc_4	5
+	
+TOTAL	99

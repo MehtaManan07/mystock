@@ -6,7 +6,8 @@ Generates professional GST-compliant invoices for transactions.
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib import colors
-from reportlab.platypus import Table, TableStyle
+from reportlab.platypus import Table, TableStyle, Paragraph
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 import os
@@ -61,6 +62,19 @@ class InvoiceGenerator:
         pdfmetrics.registerFont(TTFont('DejaVuSans', os.path.join(FONTS_DIR, 'DejaVuSans.ttf')))
         pdfmetrics.registerFont(TTFont('DejaVuSans-Bold', os.path.join(FONTS_DIR, 'DejaVuSans-Bold.ttf')))
         pdfmetrics.registerFont(TTFont('DejaVuSans-Oblique', os.path.join(FONTS_DIR, 'DejaVuSans-Oblique.ttf')))
+
+        sku_cell_style = ParagraphStyle(
+            'SkuCell',
+            fontName='DejaVuSans',
+            fontSize=8,
+            leading=10,
+        )
+        sku_cell_bold_style = ParagraphStyle(
+            'SkuCellBold',
+            fontName='DejaVuSans-Bold',
+            fontSize=8,
+            leading=10,
+        )
         
         def wrap_text(text, max_width, font_name, font_size):
             """
@@ -279,14 +293,14 @@ class InvoiceGenerator:
              'IGST\n%', 'IGST\nAmount', 'Total']
         ]
         
-        col_widths = [30, 140, 60, 40, 50, 40, 50, 60]
+        # Total = 515pt (A4 width 595 - 40 left margin - 40 right margin)
+        col_widths = [30, 185, 60, 40, 50, 35, 55, 60]
         
         # Calculate totals and prepare items data
         items_data = []
         total_qty = Decimal('0')
         total_taxable = Decimal('0')
         total_igst = Decimal('0')
-        total_amount = Decimal('0')
         
         for item in transaction.items:
             # Calculate: Rate * Quantity = Taxable Value
@@ -326,7 +340,6 @@ class InvoiceGenerator:
             total_qty += item.quantity
             total_taxable += rate_total
             total_igst += igst_amount
-            total_amount += total_amount_item
         
         # Process items in chunks that fit on each page
         items_per_page_first = 20  # First page has less space due to header
@@ -352,7 +365,7 @@ class InvoiceGenerator:
                 item = items_data[idx]
                 table_data.append([
                     str(idx + 1),
-                    item['name'],
+                    Paragraph(item['name'], sku_cell_style),
                     item['hsn'],
                     f"{item['qty']:.2f}",
                     f"{item['rate']:.2f}",
@@ -360,18 +373,18 @@ class InvoiceGenerator:
                     f"{item['igst_amount']:.2f}",
                     f"{item['total']:.2f}"
                 ])
-            
+
             # Add total row only on the last page
             if end_index == len(items_data):
                 table_data.append([
                     '',
-                    'Total',
+                    Paragraph('Total', sku_cell_bold_style),
                     '',
                     f"{float(total_qty):.2f}",
                     '',
                     '',
                     f"{float(total_igst):.2f}",
-                    f"{float(total_amount):.2f}"
+                    f"{float(transaction.total_amount):.2f}"
                 ])
             
             # Create and style table
@@ -404,7 +417,7 @@ class InvoiceGenerator:
         y -= 15
         
         c.setFont("DejaVuSans", 9)
-        words = amount_to_words(total_amount)
+        words = amount_to_words(transaction.total_amount)
         # Wrap long amount in words text
         available_width = right_margin - left_margin - 20
         words_lines = wrap_text(words, available_width, "DejaVuSans", 9)
@@ -445,7 +458,7 @@ class InvoiceGenerator:
         
         c.setFont("DejaVuSans-Bold", 10)
         c.drawString(summary_x, summary_y, f"Total Amount")
-        c.drawString(summary_x + 120, summary_y, f"₹{float(total_amount):.2f}")
+        c.drawString(summary_x + 120, summary_y, f"₹{float(transaction.total_amount):.2f}")
         summary_y -= 20
         
         c.setFont("DejaVuSans-Oblique", 8)
