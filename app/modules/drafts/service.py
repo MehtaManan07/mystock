@@ -308,6 +308,7 @@ class DraftsService:
                 paymentMethod=draft_data.get('paymentMethod'),
                 paymentReference=draft_data.get('paymentReference'),
                 notes=draft_data.get('notes'),
+                productDetailsDisplayMode=draft_data.get('productDetailsDisplayMode'),
             )
         
         return await run_db(_get_complete)

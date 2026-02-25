@@ -15,7 +15,7 @@ from decimal import Decimal
 from io import BytesIO
 
 
-from app.modules.transactions.models import Transaction
+from app.modules.transactions.models import Transaction, ProductDetailsDisplayMode
 from app.modules.settings.models import CompanySettings
 from app.modules.vendor_product_skus.models import VendorProductSku
 from app.modules.products.models import Product
@@ -309,21 +309,36 @@ class InvoiceGenerator:
             igst_amount = rate_total * Decimal('0.18')
             total_amount_item = rate_total + igst_amount
             
-            # Get vendor SKU (fallback to company SKU, then product name)
-            # Try to get vendor-specific SKU
-            vendor_sku_mapping = db.query(VendorProductSku).filter(
-                and_(
-                    VendorProductSku.product_id == item.product_id,
-                    VendorProductSku.vendor_id == transaction.contact_id,
-                    VendorProductSku.deleted_at.is_(None),
-                )
-            ).first()
+            # Get display text based on transaction's product_details_display_mode
+            display_mode = transaction.product_details_display_mode
             
-            if vendor_sku_mapping:
-                sku_display = vendor_sku_mapping.vendor_sku
-            elif item.product.company_sku:
-                sku_display = item.product.company_sku
+            if display_mode == ProductDetailsDisplayMode.customer_sku:
+                # Try customer-specific SKU first, fallback to company SKU, then product name
+                vendor_sku_mapping = db.query(VendorProductSku).filter(
+                    and_(
+                        VendorProductSku.product_id == item.product_id,
+                        VendorProductSku.vendor_id == transaction.contact_id,
+                        VendorProductSku.deleted_at.is_(None),
+                    )
+                ).first()
+                
+                if vendor_sku_mapping:
+                    sku_display = vendor_sku_mapping.vendor_sku
+                elif item.product.company_sku:
+                    sku_display = item.product.company_sku
+                else:
+                    sku_display = item.product.name
+            
+            elif display_mode == ProductDetailsDisplayMode.company_sku:
+                # Use company SKU, fallback to product name
+                sku_display = item.product.company_sku or item.product.name
+            
+            elif display_mode == ProductDetailsDisplayMode.product_name:
+                # Always use product name
+                sku_display = item.product.name
+            
             else:
+                # Default fallback (should not happen with proper defaults)
                 sku_display = item.product.name
             
             items_data.append({

@@ -38,6 +38,14 @@ class PaymentStatus(str, enum.Enum):
     unpaid = "unpaid"
 
 
+class ProductDetailsDisplayMode(str, enum.Enum):
+    """Product details display mode for invoice line items"""
+
+    customer_sku = "customer_sku"  # Use customer-specific SKU mapping
+    company_sku = "company_sku"    # Use company SKU
+    product_name = "product_name"  # Use product name
+
+
 
 
 class Transaction(BaseModel):
@@ -123,6 +131,14 @@ class Transaction(BaseModel):
     
     invoice_checksum: Mapped[Optional[str]] = mapped_column(
         String(64), nullable=True, default=None
+    )
+
+    # Product details display mode for invoice generation
+    product_details_display_mode: Mapped[ProductDetailsDisplayMode] = mapped_column(
+        SQLEnum(ProductDetailsDisplayMode, name="product_details_display_mode_enum", native_enum=False),
+        nullable=False,
+        default=ProductDetailsDisplayMode.customer_sku,
+        server_default=ProductDetailsDisplayMode.customer_sku.value,
     )
 
     # Relationships

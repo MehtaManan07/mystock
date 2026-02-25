@@ -263,12 +263,12 @@ class TransactionsService:
                 assert item.container_id is not None
                 key = (item.product_id, item.container_id)
                 container_product = container_product_map[key]
+                product = products_dict[item.product_id]
 
                 if container_product.quantity < item.quantity:
-                    product_name = products_dict[item.product_id].name
                     raise ValidationError(
-                        f"Insufficient stock for '{product_name}'. "
-                        f"Available: {container_product.quantity}, Required: {item.quantity}"
+                        f"Insufficient stock for '{product.name}'. "
+                        f"Available: {container_product.quantity} items, Required: {item.quantity} items"
                     )
         else:
             container_product_query = select(ContainerProduct).where(
@@ -316,6 +316,7 @@ class TransactionsService:
             paid_amount=transaction_data.paid_amount,
             payment_status=payment_status,
             notes=transaction_data.notes,
+            product_details_display_mode=transaction_data.product_details_display_mode,
         )
         db.add(transaction)
         db.flush()
@@ -325,6 +326,8 @@ class TransactionsService:
         inventory_logs = []
 
         for item in transaction_data.items:
+            product = products_dict[item.product_id]
+            
             line_total = item.quantity * item.unit_price
             transaction_items.append(
                 TransactionItem(

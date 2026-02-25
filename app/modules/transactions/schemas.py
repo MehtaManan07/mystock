@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime, date
 from decimal import Decimal
-from .models import TransactionType, PaymentStatus
+from .models import TransactionType, PaymentStatus, ProductDetailsDisplayMode
 from app.modules.payments.models import PaymentMethod
 
 
@@ -20,9 +20,9 @@ class TransactionItemCreate(BaseModel):
     container_id: Optional[int] = Field(
         None, gt=0, description="Container ID (required for sales)"
     )
-    quantity: int = Field(..., gt=0, description="Quantity must be positive")
+    quantity: int = Field(..., gt=0, description="Quantity in items")
     unit_price: Decimal = Field(
-        ..., ge=0, description="Unit price (can be 0 for free items)"
+        ..., ge=0, description="Unit price per item (can be 0 for free items)"
     )
 
     class Config:
@@ -57,6 +57,12 @@ class CreateTransactionDto(BaseModel):
     )
 
     notes: Optional[str] = Field(None, max_length=1000, description="Additional notes")
+
+    # Product details display mode for invoice generation
+    product_details_display_mode: ProductDetailsDisplayMode = Field(
+        default=ProductDetailsDisplayMode.customer_sku,
+        description="Display mode for product details in invoice (customer_sku, company_sku, or product_name)"
+    )
 
     class Config:
         from_attributes = True
@@ -218,6 +224,11 @@ class TransactionResponse(BaseModel):
     )
     invoice_checksum: Optional[str] = Field(
         None, description="MD5 checksum of invoice PDF"
+    )
+
+    # Product details display mode
+    product_details_display_mode: ProductDetailsDisplayMode = Field(
+        ..., description="Display mode for product details in invoice"
     )
 
     payments: List[PaymentResponse]

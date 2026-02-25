@@ -29,6 +29,7 @@ class DraftDataModel(BaseModel):
     paymentMethod: Optional[str] = None
     paymentReference: Optional[str] = None
     notes: Optional[str] = None
+    productDetailsDisplayMode: Optional[str] = None
 
 
 class CreateDraftDto(BaseModel):
@@ -94,6 +95,7 @@ class CompleteDraftResponse(BaseModel):
     paymentMethod: str | None
     paymentReference: str | None
     notes: str | None
+    productDetailsDisplayMode: str | None
 
     class Config:
         from_attributes = True

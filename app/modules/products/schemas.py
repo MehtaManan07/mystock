@@ -102,7 +102,7 @@ class ProductResponse(BaseModel):
     deleted_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
-    totalQuantity: int
+    totalQuantity: int  # Total quantity in items
 
     class Config:
         from_attributes = True
