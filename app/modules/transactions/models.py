@@ -62,6 +62,7 @@ class Transaction(BaseModel):
         Index("idx_transaction_date", "transaction_date"),
         Index("idx_transaction_type_status", "type", "payment_status"),
         Index("idx_transaction_invoice_url", "invoice_url"),
+        Index("idx_transaction_contact_id", "contact_id"),
     )
 
     transaction_number: Mapped[str] = mapped_column(

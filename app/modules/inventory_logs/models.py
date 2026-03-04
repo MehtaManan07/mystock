@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Integer, String, Text, ForeignKey, DateTime, func
+from sqlalchemy import Integer, String, Text, ForeignKey, DateTime, func, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import TYPE_CHECKING, Optional
 
@@ -18,6 +18,12 @@ class InventoryLog(BaseModel):
     """
 
     __tablename__ = "inventory_log"
+
+    __table_args__ = (
+        Index("idx_inventory_log_product_id", "product_id"),
+        Index("idx_inventory_log_container_id", "container_id"),
+        Index("idx_inventory_log_timestamp", "timestamp"),
+    )
 
     # Foreign Keys
     product_id: Mapped[int] = mapped_column(

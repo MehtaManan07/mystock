@@ -7,7 +7,7 @@ from typing import List, Optional, Dict, Tuple, cast, Union
 from datetime import date
 from decimal import Decimal
 import math
-from sqlalchemy import select, func, desc, tuple_
+from sqlalchemy import select, func, desc, tuple_, insert as sa_insert, update as sa_update, case as sa_case
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.db.engine import run_db
@@ -244,7 +244,7 @@ class TransactionsService:
         product_ids = [item.product_id for item in transaction_data.items]
         products_dict = TransactionsService._validate_products_exist(db, product_ids)
 
-        # STEP 3: Validate Container Stock
+        # STEP 3: Validate Container IDs are present
         for item in transaction_data.items:
             if not item.container_id:
                 raise ValidationError(
@@ -256,33 +256,31 @@ class TransactionsService:
             for item in transaction_data.items
         ]
 
+        # STEP 3a: Fetch + validate ContainerProducts
         if is_sale:
             container_product_map = TransactionsService._validate_and_get_stock(db, pairs)
-            
+
             for item in transaction_data.items:
                 assert item.container_id is not None
-                key = (item.product_id, item.container_id)
-                container_product = container_product_map[key]
+                cp = container_product_map[(item.product_id, item.container_id)]
                 product = products_dict[item.product_id]
-
-                if container_product.quantity < item.quantity:
+                if cp.quantity < item.quantity:
                     raise ValidationError(
                         f"Insufficient stock for '{product.name}'. "
-                        f"Available: {container_product.quantity} items, Required: {item.quantity} items"
+                        f"Available: {cp.quantity} items, Required: {item.quantity} items"
                     )
         else:
-            container_product_query = select(ContainerProduct).where(
-                tuple_(ContainerProduct.product_id, ContainerProduct.container_id).in_(pairs)
+            cp_result = db.execute(
+                select(ContainerProduct).where(
+                    tuple_(ContainerProduct.product_id, ContainerProduct.container_id).in_(pairs)
+                )
             )
-            cp_result = db.execute(container_product_query)
-            container_products = cp_result.scalars().all()
             container_product_map: Dict[Tuple[int, int], ContainerProduct] = {
-                (cp.product_id, cp.container_id): cp for cp in container_products
+                (cp.product_id, cp.container_id): cp for cp in cp_result.scalars().all()
             }
 
         # STEP 4: Calculate Totals
         subtotal = sum(item.quantity * item.unit_price for item in transaction_data.items)
-        # Calculate total and round up to nearest whole number
         total_before_rounding = subtotal + transaction_data.tax_amount - transaction_data.discount_amount
         total_amount = Decimal(math.ceil(float(total_before_rounding)))
 
@@ -319,102 +317,135 @@ class TransactionsService:
             product_details_display_mode=transaction_data.product_details_display_mode,
         )
         db.add(transaction)
-        db.flush()
+        db.flush()  # Needed to get transaction.id for FK references below
 
-        # STEP 7: Create Items & Update Inventory
-        transaction_items = []
-        inventory_logs = []
+        # STEP 7: Build item/log dicts + compute ContainerProduct deltas in one pass
+        action = "sale" if is_sale else "purchase"
+        item_dicts: List[dict] = []
+        log_dicts: List[dict] = []
+        # Tracks running quantity for accurate log notes when same pair appears >1 time
+        running_qty: Dict[Tuple[int, int], int] = {
+            key: cp.quantity for key, cp in container_product_map.items()
+        }
+        # Accumulated quantity deltas per (product_id, container_id) for bulk UPDATE
+        cp_update_deltas: Dict[Tuple[int, int], int] = {}
+        # New (product_id, container_id) pairs that need INSERT instead of UPDATE (purchase only)
+        new_cp_dicts: Dict[Tuple[int, int], int] = {}
 
         for item in transaction_data.items:
-            product = products_dict[item.product_id]
-            
-            line_total = item.quantity * item.unit_price
-            transaction_items.append(
-                TransactionItem(
-                    transaction_id=transaction.id,
-                    product_id=item.product_id,
-                    container_id=item.container_id,
-                    quantity=item.quantity,
-                    unit_price=item.unit_price,
-                    line_total=line_total,
-                )
-            )
-
             assert item.container_id is not None
             key = (item.product_id, item.container_id)
+            delta = -item.quantity if is_sale else item.quantity
 
-            if is_sale:
-                container_product = container_product_map[key]
-                old_qty = container_product.quantity
-                container_product.quantity -= item.quantity
-                new_qty = container_product.quantity
-                inventory_quantity = -item.quantity
-                action = "sale"
+            old_qty = running_qty.get(key, 0)
+            new_qty = old_qty + delta
+            running_qty[key] = new_qty
+
+            if is_sale or key in container_product_map:
+                # Existing row — accumulate delta for bulk UPDATE
+                cp_update_deltas[key] = cp_update_deltas.get(key, 0) + delta
             else:
-                container_product = container_product_map.get(key)
-                if container_product:
-                    old_qty = container_product.quantity
-                    container_product.quantity += item.quantity
-                    new_qty = container_product.quantity
-                else:
-                    container_product = ContainerProduct(
-                        container_id=item.container_id,
-                        product_id=item.product_id,
-                        quantity=item.quantity,
-                    )
-                    db.add(container_product)
-                    old_qty = 0
-                    new_qty = item.quantity
-                    container_product_map[key] = container_product
-                inventory_quantity = item.quantity
-                action = "purchase"
+                # Purchase only: new product+container pair — accumulate for bulk INSERT
+                new_cp_dicts[key] = new_cp_dicts.get(key, 0) + delta
 
-            inventory_logs.append(
-                InventoryLog(
-                    product_id=item.product_id,
-                    container_id=item.container_id,
-                    action=action,
-                    quantity=inventory_quantity,
-                    note=f"{action.capitalize()} {transaction_number} - {old_qty} → {new_qty}",
+            item_dicts.append({
+                "transaction_id": transaction.id,
+                "product_id": item.product_id,
+                "container_id": item.container_id,
+                "quantity": item.quantity,
+                "unit_price": item.unit_price,
+                "line_total": item.quantity * item.unit_price,
+            })
+            log_dicts.append({
+                "product_id": item.product_id,
+                "container_id": item.container_id,
+                "action": action,
+                "quantity": delta,
+                "note": f"{action.capitalize()} {transaction_number} - {old_qty} → {new_qty}",
+            })
+
+        # STEP 8: Bulk INSERT TransactionItems — 1 statement instead of N
+        db.execute(sa_insert(TransactionItem), item_dicts)
+
+        # STEP 9: Bulk INSERT InventoryLogs — 1 statement instead of N
+        db.execute(sa_insert(InventoryLog), log_dicts)
+
+        # STEP 10: Bulk UPDATE ContainerProduct quantities — 1 CASE WHEN instead of N UPDATEs
+        if cp_update_deltas:
+            db.execute(
+                sa_update(ContainerProduct)
+                .where(
+                    tuple_(ContainerProduct.product_id, ContainerProduct.container_id).in_(
+                        list(cp_update_deltas.keys())
+                    )
+                )
+                .values(
+                    quantity=sa_case(
+                        *[
+                            (
+                                (ContainerProduct.product_id == pid) & (ContainerProduct.container_id == cid),
+                                ContainerProduct.quantity + delta,
+                            )
+                            for (pid, cid), delta in cp_update_deltas.items()
+                        ],
+                        else_=ContainerProduct.quantity,
+                    )
                 )
             )
 
-        db.add_all(transaction_items)
-        db.add_all(inventory_logs)
+        # Purchase only: INSERT new ContainerProduct rows for brand-new product+container pairs
+        if new_cp_dicts:
+            db.execute(
+                sa_insert(ContainerProduct),
+                [
+                    {"product_id": pid, "container_id": cid, "quantity": qty}
+                    for (pid, cid), qty in new_cp_dicts.items()
+                ],
+            )
 
-        # STEP 8: Update Contact Balance
+        # STEP 11: Update Contact Balance
         outstanding_amount = total_amount - transaction_data.paid_amount
         balance_change = outstanding_amount if is_sale else -outstanding_amount
-        
         if balance_change != 0:
             TransactionsService._update_contact_balance(contact, balance_change)
 
-        # STEP 9: Create Payment Record (if paid)
+        # STEP 12: Create Payment Record (if paid)
+        payment: Optional[Payment] = None
         if transaction_data.paid_amount > 0:
             if not transaction_data.payment_method:
                 raise ValidationError("Payment method required when paid_amount > 0")
 
-            # Derive payment type from transaction type
             payment_type = 'income' if transaction_type == TransactionType.sale else 'expense'
-
             payment = Payment(
                 transaction_id=transaction.id,
                 payment_date=transaction_data.transaction_date,
                 amount=transaction_data.paid_amount,
                 payment_method=transaction_data.payment_method,
                 reference_number=transaction_data.payment_reference,
-                description=f"Payment for {transaction_type.value} {transaction_number}",  # Payment model uses 'description', not 'notes'
+                description=f"Payment for {transaction_type.value} {transaction_number}",
                 type=payment_type,
                 category="transaction_payment",
             )
             db.add(payment)
 
-        # STEP 10: Flush & Refresh
+        # STEP 13: Flush ORM-tracked mutations (contact balance + payment INSERT)
         db.flush()
-        db.refresh(transaction)
 
-        # Note: Invoice generation is skipped as it requires async operations
-        # Can be handled separately after the transaction
+        # STEP 14: Load items with product+container via a single JOIN SELECT.
+        # Replaces db.refresh(transaction) which was firing a redundant round-trip.
+        loaded_items = list(
+            db.execute(
+                select(TransactionItem).where(
+                    TransactionItem.transaction_id == transaction.id,
+                    TransactionItem.deleted_at.is_(None),
+                )
+            ).scalars().all()
+        )
+
+        # Populate relationships from in-memory objects — no extra DB round-trips
+        transaction.items = loaded_items
+        transaction.contact = contact
+        transaction.payments = [payment] if payment else []
 
         return transaction
 
@@ -571,13 +602,12 @@ class TransactionsService:
         def _delete_transaction(db: Session) -> None:
             from datetime import datetime
 
-            # STEP 1: Fetch transaction with all relationships
+            # STEP 1: Fetch transaction — only load items+contact (payments not needed in memory)
             query = (
                 select(Transaction)
                 .options(
                     selectinload(Transaction.contact),
                     selectinload(Transaction.items),
-                    selectinload(Transaction.payments),
                 )
                 .where(Transaction.id == transaction_id, Transaction.deleted_at.is_(None))
             )
@@ -588,7 +618,7 @@ class TransactionsService:
             if not transaction:
                 raise NotFoundError("Transaction", transaction_id)
 
-            # STEP 2: Reverse inventory changes
+            # STEP 2: Reverse inventory — bulk CASE WHEN UPDATE (1 statement instead of N)
             if transaction.items:
                 pairs = [
                     (item.product_id, item.container_id)
@@ -597,49 +627,81 @@ class TransactionsService:
                 ]
 
                 if pairs:
-                    container_product_query = select(ContainerProduct).where(
-                        tuple_(
-                            ContainerProduct.product_id, ContainerProduct.container_id
-                        ).in_(pairs)
+                    cp_result = db.execute(
+                        select(ContainerProduct).where(
+                            tuple_(ContainerProduct.product_id, ContainerProduct.container_id).in_(pairs)
+                        )
                     )
-                    cp_result = db.execute(container_product_query)
-                    container_products = cp_result.scalars().all()
-
                     container_product_map = {
-                        (cp.product_id, cp.container_id): cp for cp in container_products
+                        (cp.product_id, cp.container_id): cp
+                        for cp in cp_result.scalars().all()
                     }
 
+                    # Accumulate per-key deltas (reverse of original: add back for sales, subtract for purchases)
+                    cp_deltas: Dict[Tuple[int, int], int] = {}
                     for item in transaction.items:
                         if not item.container_id:
                             continue
-
                         key = (item.product_id, item.container_id)
-                        container_product = container_product_map.get(key)
+                        if key not in container_product_map:
+                            continue
+                        delta = item.quantity if transaction.type == TransactionType.sale else -item.quantity
+                        cp_deltas[key] = cp_deltas.get(key, 0) + delta
 
-                        if container_product:
-                            if transaction.type == TransactionType.sale:
-                                container_product.quantity += item.quantity
-                            else:
-                                container_product.quantity -= item.quantity
+                    if cp_deltas:
+                        db.execute(
+                            sa_update(ContainerProduct)
+                            .where(
+                                tuple_(ContainerProduct.product_id, ContainerProduct.container_id).in_(
+                                    list(cp_deltas.keys())
+                                )
+                            )
+                            .values(
+                                quantity=sa_case(
+                                    *[
+                                        (
+                                            (ContainerProduct.product_id == pid) & (ContainerProduct.container_id == cid),
+                                            ContainerProduct.quantity + delta,
+                                        )
+                                        for (pid, cid), delta in cp_deltas.items()
+                                    ],
+                                    else_=ContainerProduct.quantity,
+                                )
+                            )
+                        )
 
             # STEP 3: Reverse contact balance
             balance_to_reverse = transaction.total_amount - transaction.paid_amount
-
             if balance_to_reverse > 0:
                 if transaction.type == TransactionType.sale:
                     TransactionsService._update_contact_balance(transaction.contact, -balance_to_reverse)
                 else:
                     TransactionsService._update_contact_balance(transaction.contact, balance_to_reverse)
 
-            # STEP 4: Soft delete transaction and related records
+            # STEP 4: Soft delete — transaction via ORM, items+payments via bulk UPDATE
             now = datetime.utcnow()
             transaction.deleted_at = now
 
-            for item in transaction.items:
-                item.deleted_at = now
+            # Single UPDATE for all items instead of N individual ORM mutations
+            if transaction.items:
+                db.execute(
+                    sa_update(TransactionItem)
+                    .where(
+                        TransactionItem.transaction_id == transaction_id,
+                        TransactionItem.deleted_at.is_(None),
+                    )
+                    .values(deleted_at=now)
+                )
 
-            for payment in transaction.payments:
-                payment.deleted_at = now
+            # Single UPDATE for all payments instead of M individual ORM mutations
+            db.execute(
+                sa_update(Payment)
+                .where(
+                    Payment.transaction_id == transaction_id,
+                    Payment.deleted_at.is_(None),
+                )
+                .values(deleted_at=now)
+            )
 
             db.flush()
         await run_db(_delete_transaction)
