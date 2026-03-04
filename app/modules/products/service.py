@@ -580,6 +580,60 @@ class ProductService:
         await run_db(_remove)
 
     @staticmethod
+    async def find_by_skus(skus: List[str]) -> List[dict]:
+        """
+        Fetch all products whose company_sku matches any of the given SKUs.
+        Single DB query for all SKUs — replaces N individual search calls.
+
+        Args:
+            skus: List of company SKUs to look up (case-insensitive)
+
+        Returns:
+            List of matching products with totalQuantity
+        """
+        def _find_by_skus(db: Session) -> List[dict]:
+            if not skus:
+                return []
+
+            lower_skus = [s.lower() for s in skus]
+            query = (
+                select(Product)
+                .where(
+                    Product.deleted_at.is_(None),
+                    func.lower(Product.company_sku).in_(lower_skus),
+                )
+                .options(
+                    selectinload(Product.containers).selectinload(ContainerProduct.container)
+                )
+            )
+            products = db.execute(query).scalars().all()
+            return [
+                {
+                    "id": product.id,
+                    "name": product.name,
+                    "size": product.size,
+                    "packing": product.packing,
+                    "company_sku": product.company_sku,
+                    "default_sale_price": product.default_sale_price,
+                    "default_purchase_price": product.default_purchase_price,
+                    "display_name": product.display_name,
+                    "description": product.description,
+                    "mrp": product.mrp,
+                    "tags": product.tags,
+                    "product_type": product.product_type,
+                    "dimensions": product.dimensions,
+                    "deleted_at": product.deleted_at,
+                    "created_at": product.created_at,
+                    "updated_at": product.updated_at,
+                    "totalQuantity": sum(
+                        cp.quantity for cp in product.containers if cp.deleted_at is None
+                    ),
+                }
+                for product in products
+            ]
+        return await run_db(_find_by_skus)
+
+    @staticmethod
     async def validate_products_exist(product_ids: List[int]) -> Dict[int, Product]:
         """
         Validate that all products exist and return them as a dict.

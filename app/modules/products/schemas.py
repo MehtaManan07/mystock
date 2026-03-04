@@ -232,3 +232,9 @@ class ProductPaginatedResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
+class SkuBatchLookupDto(BaseModel):
+    """DTO for batch SKU lookup"""
+
+    skus: List[str] = Field(..., min_length=1, description="List of company SKUs to look up")
+

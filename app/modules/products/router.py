@@ -18,6 +18,7 @@ from .schemas import (
     ProductPaginatedResponse,
     CopyFromProductDto,
     ReorderImagesDto,
+    SkuBatchLookupDto,
 )
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -109,6 +110,12 @@ async def get_all_products(
         search=search,
     )
     return result
+
+
+@router.post("/lookup-by-skus", response_model=List[ProductResponse])
+async def lookup_products_by_skus(dto: SkuBatchLookupDto):
+    """Batch lookup products by company SKUs. Returns all matching products in a single query."""
+    return await ProductService.find_by_skus(dto.skus)
 
 
 @router.get("/{product_id}", response_model=ProductDetailResponse)
