@@ -116,7 +116,8 @@ class TransactionsService:
             return {}
             
         container_product_query = select(ContainerProduct).where(
-            tuple_(ContainerProduct.product_id, ContainerProduct.container_id).in_(items)
+            tuple_(ContainerProduct.product_id, ContainerProduct.container_id).in_(items),
+            ContainerProduct.deleted_at.is_(None),
         )
         cp_result = db.execute(container_product_query)
         container_products = cp_result.scalars().all()
@@ -371,6 +372,8 @@ class TransactionsService:
         db.execute(sa_insert(InventoryLog), log_dicts)
 
         # STEP 10: Bulk UPDATE ContainerProduct quantities — 1 CASE WHEN instead of N UPDATEs
+        # Also clears deleted_at to restore soft-deleted rows when stock arrives via purchases.
+        # For sales, _validate_and_get_stock already ensures only active rows are used.
         if cp_update_deltas:
             db.execute(
                 sa_update(ContainerProduct)
@@ -389,7 +392,8 @@ class TransactionsService:
                             for (pid, cid), delta in cp_update_deltas.items()
                         ],
                         else_=ContainerProduct.quantity,
-                    )
+                    ),
+                    deleted_at=None,
                 )
             )
 
@@ -435,9 +439,14 @@ class TransactionsService:
         # Replaces db.refresh(transaction) which was firing a redundant round-trip.
         loaded_items = list(
             db.execute(
-                select(TransactionItem).where(
+                select(TransactionItem)
+                .where(
                     TransactionItem.transaction_id == transaction.id,
                     TransactionItem.deleted_at.is_(None),
+                )
+                .options(
+                    selectinload(TransactionItem.product),
+                    selectinload(TransactionItem.container),
                 )
             ).scalars().all()
         )

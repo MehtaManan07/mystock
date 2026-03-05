@@ -104,6 +104,7 @@ class ContainerProductService:
                     # Handle soft delete or update
                     if quantity == 0:
                         # Soft delete
+                        record.quantity = 0
                         record.deleted_at = datetime.utcnow()
                         to_soft_delete.append(record)
                     else:
@@ -225,7 +226,10 @@ class ContainerProductService:
             query = (
                 select(ContainerProduct)
                 .join(ContainerProduct.container)
-                .where(ContainerProduct.product_id == product_id)
+                .where(
+                    ContainerProduct.product_id == product_id,
+                    ContainerProduct.deleted_at.is_(None),
+                )
                 .options(
                     selectinload(ContainerProduct.container),
                     selectinload(ContainerProduct.product),
