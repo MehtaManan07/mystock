@@ -97,6 +97,15 @@ class BasicAnalyticsResponse(BaseModel):
         from_attributes = True
 
 
+class ProductIdsBatchDto(BaseModel):
+    """DTO for batch fetching containers by multiple product IDs"""
+
+    productIds: List[int] = Field(..., min_length=1, description="List of product IDs")
+
+    class Config:
+        from_attributes = True
+
+
 class MapProductInputDto(BaseModel):
     """Input for mapping products to IDs"""
 

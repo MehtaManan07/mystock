@@ -242,6 +242,35 @@ class ContainerProductService:
         return await run_db(_get_containers_for_product)
 
     @staticmethod
+    async def get_containers_for_products_batch(product_ids: List[int]) -> List[ContainerProduct]:
+        """
+        Get all containers for multiple products in a single query.
+
+        Args:
+            product_ids: List of product IDs
+
+        Returns:
+            Flat list of ContainerProduct records (each has product_id set)
+        """
+        def _get_containers_for_products_batch(db: Session) -> List[ContainerProduct]:
+            query = (
+                select(ContainerProduct)
+                .join(ContainerProduct.container)
+                .where(
+                    ContainerProduct.product_id.in_(product_ids),
+                    ContainerProduct.deleted_at.is_(None),
+                )
+                .options(
+                    selectinload(ContainerProduct.container),
+                    selectinload(ContainerProduct.product),
+                )
+                .order_by(Container.name.asc())
+            )
+            result = db.execute(query)
+            return list(result.scalars().all())
+        return await run_db(_get_containers_for_products_batch)
+
+    @staticmethod
     async def search_containers_by_sku(sku: str) -> List[ContainerProduct]:
         """
         Search containers by product SKU (name).

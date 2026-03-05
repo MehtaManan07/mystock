@@ -15,6 +15,7 @@ from .schemas import (
     BasicAnalyticsResponse,
     MapProductInputDto,
     MapProductOutputDto,
+    ProductIdsBatchDto,
 )
 
 router = APIRouter(prefix="/container-products", tags=["container-products"])
@@ -68,6 +69,17 @@ async def get_containers_for_product(product_id: int):
     Returns container-product relationships with container details.
     """
     items = await ContainerProductService.get_containers_for_product(product_id)
+    return items
+
+
+@router.post("/by-product-ids", response_model=List[ContainerProductResponse])
+async def get_containers_for_products_batch(dto: ProductIdsBatchDto):
+    """
+    Batch fetch containers for multiple products in a single query.
+    Used by the Deodap bill creation flow to avoid N+1 requests.
+    Returns a flat list of container-product records for all requested product IDs.
+    """
+    items = await ContainerProductService.get_containers_for_products_batch(dto.productIds)
     return items
 
 
