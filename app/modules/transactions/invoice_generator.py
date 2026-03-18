@@ -15,7 +15,7 @@ from decimal import Decimal
 from io import BytesIO
 
 
-from app.modules.transactions.models import Transaction, ProductDetailsDisplayMode
+from app.modules.transactions.models import Transaction, ProductDetailsDisplayMode, TaxType
 from app.modules.settings.models import CompanySettings
 from app.modules.vendor_product_skus.models import VendorProductSku
 from app.modules.products.models import Product
@@ -287,26 +287,45 @@ class InvoiceGenerator:
         y = draw_header(c, is_first_page=True)
         
         # ---------- ITEMS TABLE WITH PAGINATION ----------
-        # Prepare table header
-        table_header = [
-            ['Sr.\nNo.', 'SKU / Description', 'HSN / SAC', 'Qty', 'Rate', 
-             'IGST\n%', 'IGST\nAmount', 'Total']
-        ]
-        
-        # Total = 515pt (A4 width 595 - 40 left margin - 40 right margin)
-        col_widths = [30, 185, 60, 40, 50, 35, 55, 60]
+        # Determine tax type for column layout
+        is_intra_state = transaction.tax_type == TaxType.cgst_sgst
+
+        # Prepare table header based on tax type
+        if is_intra_state:
+            table_header = [
+                ['Sr.\nNo.', 'SKU / Description', 'HSN / SAC', 'Qty', 'Rate',
+                 'CGST\n%', 'CGST\nAmt', 'SGST\n%', 'SGST\nAmt', 'Total']
+            ]
+            # Total = 515pt
+            col_widths = [25, 140, 55, 35, 45, 30, 45, 30, 45, 65]
+        else:
+            table_header = [
+                ['Sr.\nNo.', 'SKU / Description', 'HSN / SAC', 'Qty', 'Rate',
+                 'IGST\n%', 'IGST\nAmount', 'Total']
+            ]
+            # Total = 515pt (A4 width 595 - 40 left margin - 40 right margin)
+            col_widths = [30, 185, 60, 40, 50, 35, 55, 60]
         
         # Calculate totals and prepare items data
         items_data = []
         total_qty = Decimal('0')
         total_taxable = Decimal('0')
         total_igst = Decimal('0')
-        
+        total_cgst = Decimal('0')
+        total_sgst = Decimal('0')
+
+        # Derive the actual tax rate from the transaction's stored tax_amount and subtotal
+        subtotal = transaction.subtotal or Decimal('0')
+        igst_rate = (transaction.tax_amount / subtotal) if subtotal > 0 else Decimal('0')
+        igst_percent = float(igst_rate * 100)
+        # For intra-state, each component is half
+        half_rate = igst_rate / Decimal('2')
+        half_percent = igst_percent / 2
+
         for item in transaction.items:
             # Calculate: Rate * Quantity = Taxable Value
-            # Total = Taxable Value + GST (where GST = Taxable Value * 18%)
             rate_total = item.unit_price * item.quantity
-            igst_amount = rate_total * Decimal('0.18')
+            igst_amount = rate_total * igst_rate
             total_amount_item = rate_total + igst_amount
             
             # Get display text based on transaction's product_details_display_mode
@@ -341,20 +360,29 @@ class InvoiceGenerator:
                 # Default fallback (should not happen with proper defaults)
                 sku_display = item.product.name
             
+            cgst_amount_item = rate_total * half_rate
+            sgst_amount_item = igst_amount - cgst_amount_item  # ensures no rounding loss
+
             items_data.append({
                 'name': sku_display,
                 'hsn': company_settings.hsn_code,
                 'qty': item.quantity,
                 'rate': float(item.unit_price),
-                'taxable': float(rate_total),  # Keep for summary calculations
-                'igst_percent': 18.0,
+                'taxable': float(rate_total),
+                'igst_percent': igst_percent,
                 'igst_amount': float(igst_amount),
+                'cgst_percent': half_percent,
+                'cgst_amount': float(cgst_amount_item),
+                'sgst_percent': half_percent,
+                'sgst_amount': float(sgst_amount_item),
                 'total': float(total_amount_item)
             })
-            
+
             total_qty += item.quantity
             total_taxable += rate_total
             total_igst += igst_amount
+            total_cgst += cgst_amount_item
+            total_sgst += sgst_amount_item
         
         # Process items in chunks that fit on each page
         items_per_page_first = 20  # First page has less space due to header
@@ -378,29 +406,57 @@ class InvoiceGenerator:
             
             for idx in range(item_index, end_index):
                 item = items_data[idx]
-                table_data.append([
-                    str(idx + 1),
-                    Paragraph(item['name'], sku_cell_style),
-                    item['hsn'],
-                    f"{item['qty']:.2f}",
-                    f"{item['rate']:.2f}",
-                    f"{item['igst_percent']:.2f}",
-                    f"{item['igst_amount']:.2f}",
-                    f"{item['total']:.2f}"
-                ])
+                if is_intra_state:
+                    table_data.append([
+                        str(idx + 1),
+                        Paragraph(item['name'], sku_cell_style),
+                        item['hsn'],
+                        f"{item['qty']:.2f}",
+                        f"{item['rate']:.2f}",
+                        f"{item['cgst_percent']:.2f}",
+                        f"{item['cgst_amount']:.2f}",
+                        f"{item['sgst_percent']:.2f}",
+                        f"{item['sgst_amount']:.2f}",
+                        f"{item['total']:.2f}"
+                    ])
+                else:
+                    table_data.append([
+                        str(idx + 1),
+                        Paragraph(item['name'], sku_cell_style),
+                        item['hsn'],
+                        f"{item['qty']:.2f}",
+                        f"{item['rate']:.2f}",
+                        f"{item['igst_percent']:.2f}",
+                        f"{item['igst_amount']:.2f}",
+                        f"{item['total']:.2f}"
+                    ])
 
             # Add total row only on the last page
             if end_index == len(items_data):
-                table_data.append([
-                    '',
-                    Paragraph('Total', sku_cell_bold_style),
-                    '',
-                    f"{float(total_qty):.2f}",
-                    '',
-                    '',
-                    f"{float(total_igst):.2f}",
-                    f"{float(transaction.total_amount):.2f}"
-                ])
+                if is_intra_state:
+                    table_data.append([
+                        '',
+                        Paragraph('Total', sku_cell_bold_style),
+                        '',
+                        f"{float(total_qty):.2f}",
+                        '',
+                        '',
+                        f"{float(total_cgst):.2f}",
+                        '',
+                        f"{float(total_sgst):.2f}",
+                        f"{float(transaction.total_amount):.2f}"
+                    ])
+                else:
+                    table_data.append([
+                        '',
+                        Paragraph('Total', sku_cell_bold_style),
+                        '',
+                        f"{float(total_qty):.2f}",
+                        '',
+                        '',
+                        f"{float(transaction.tax_amount):.2f}",
+                        f"{float(transaction.total_amount):.2f}"
+                    ])
             
             # Create and style table
             table = Table(table_data, colWidths=col_widths)
@@ -457,18 +513,27 @@ class InvoiceGenerator:
         # ---------- SUMMARY BOX (Right side) ----------
         summary_y = y + 70
         summary_x = right_margin - 200
-        
+
         c.setFont("DejaVuSans", 9)
         c.drawString(summary_x, summary_y, f"Taxable Amount")
         c.drawString(summary_x + 120, summary_y, f"{float(total_taxable):.2f}")
         summary_y -= 15
-        
-        c.drawString(summary_x, summary_y, f"Add : IGST")
-        c.drawString(summary_x + 120, summary_y, f"{float(total_igst):.2f}")
-        summary_y -= 15
-        
+
+        if is_intra_state:
+            c.drawString(summary_x, summary_y, f"Add : CGST")
+            c.drawString(summary_x + 120, summary_y, f"{float(total_cgst):.2f}")
+            summary_y -= 15
+
+            c.drawString(summary_x, summary_y, f"Add : SGST")
+            c.drawString(summary_x + 120, summary_y, f"{float(total_sgst):.2f}")
+            summary_y -= 15
+        else:
+            c.drawString(summary_x, summary_y, f"Add : IGST")
+            c.drawString(summary_x + 120, summary_y, f"{float(transaction.tax_amount):.2f}")
+            summary_y -= 15
+
         c.drawString(summary_x, summary_y, f"Total Tax")
-        c.drawString(summary_x + 120, summary_y, f"{float(total_igst):.2f}")
+        c.drawString(summary_x + 120, summary_y, f"{float(transaction.tax_amount):.2f}")
         summary_y -= 15
         
         c.setFont("DejaVuSans-Bold", 10)

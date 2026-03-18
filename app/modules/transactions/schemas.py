@@ -2,11 +2,11 @@
 Transaction DTOs (Data Transfer Objects) - equivalent to NestJS DTOs
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional, List
 from datetime import datetime, date
-from decimal import Decimal
-from .models import TransactionType, PaymentStatus, ProductDetailsDisplayMode
+from decimal import Decimal, ROUND_HALF_UP
+from .models import TransactionType, PaymentStatus, ProductDetailsDisplayMode, TaxType
 from app.modules.payments.models import PaymentMethod
 
 
@@ -62,6 +62,12 @@ class CreateTransactionDto(BaseModel):
     product_details_display_mode: ProductDetailsDisplayMode = Field(
         default=ProductDetailsDisplayMode.customer_sku,
         description="Display mode for product details in invoice (customer_sku, company_sku, or product_name)"
+    )
+
+    # Tax type: igst (inter-state) or cgst_sgst (intra-state)
+    tax_type: Optional[TaxType] = Field(
+        None,
+        description="Tax type: 'igst' for inter-state or 'cgst_sgst' for intra-state. Auto-determined from GSTIN if not provided."
     )
 
     class Config:
@@ -158,6 +164,7 @@ class ContactInTransactionResponse(BaseModel):
     phone: str
     type: str
     balance: Decimal
+    gstin: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -213,6 +220,11 @@ class TransactionResponse(BaseModel):
     paid_amount: Decimal
     payment_status: PaymentStatus
 
+    # Tax type and split amounts
+    tax_type: TaxType = Field(default=TaxType.igst, description="Tax type: igst or cgst_sgst")
+    cgst_amount: Optional[Decimal] = Field(None, description="CGST amount (tax_amount/2 if intra-state)")
+    sgst_amount: Optional[Decimal] = Field(None, description="SGST amount (tax_amount/2 if intra-state)")
+
     # Computed field
     balance_due: Decimal = Field(..., description="Total amount - paid amount")
 
@@ -236,6 +248,15 @@ class TransactionResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     deleted_at: Optional[datetime] = None
+
+    @model_validator(mode='after')
+    def compute_tax_split(self) -> 'TransactionResponse':
+        """Compute CGST/SGST amounts from tax_amount when tax_type is cgst_sgst."""
+        if self.tax_type == TaxType.cgst_sgst and self.tax_amount > 0:
+            half = (self.tax_amount / Decimal('2')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            self.cgst_amount = half
+            self.sgst_amount = self.tax_amount - half
+        return self
 
     class Config:
         from_attributes = True

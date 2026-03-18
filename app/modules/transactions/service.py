@@ -17,6 +17,7 @@ from .models import (
     TransactionItem,
     TransactionType,
     PaymentStatus,
+    TaxType,
 )
 from app.modules.payments.models import Payment, PaymentMethod
 from .schemas import (
@@ -28,6 +29,7 @@ from .schemas import (
 from app.modules.contacts.models import Contact, ContactType
 from app.modules.products.models import Product
 from app.modules.containers.models import Container
+from app.modules.settings.models import CompanySettings
 from app.modules.container_products.models import ContainerProduct
 from app.modules.inventory_logs.models import InventoryLog
 
@@ -141,6 +143,35 @@ class TransactionsService:
         contact.balance += amount
 
     @staticmethod
+    def _determine_tax_type(db: Session, contact: Contact, explicit_tax_type: Optional[TaxType] = None) -> TaxType:
+        """
+        Determine tax type (IGST vs CGST+SGST) for a transaction.
+
+        Rules:
+        - If explicitly provided by user -> use it
+        - If contact has GSTIN -> compare state codes with seller GSTIN
+        - If contact has no GSTIN and no explicit choice -> default to cgst_sgst (assume same state)
+        """
+        if explicit_tax_type is not None:
+            return explicit_tax_type
+
+        # Get seller GSTIN from company settings
+        settings = db.execute(
+            select(CompanySettings).where(CompanySettings.is_active == True)
+        ).scalar_one_or_none()
+
+        seller_state = settings.seller_gstin[:2] if settings and settings.seller_gstin and len(settings.seller_gstin) >= 2 else None
+
+        if contact.gstin and len(contact.gstin) >= 2:
+            buyer_state = contact.gstin[:2]
+            if seller_state and seller_state == buyer_state:
+                return TaxType.cgst_sgst
+            return TaxType.igst
+
+        # No GSTIN on contact - default to intra-state (same state assumption)
+        return TaxType.cgst_sgst
+
+    @staticmethod
     def _generate_transaction_number(db: Session, transaction_type: TransactionType) -> str:
         """
         Generate unique transaction number based on type.
@@ -241,6 +272,11 @@ class TransactionsService:
         else:
             contact = TransactionsService._validate_contact_for_purchase(db, transaction_data.contact_id)
 
+        # STEP 1b: Determine tax type
+        tax_type = TransactionsService._determine_tax_type(
+            db, contact, transaction_data.tax_type
+        )
+
         # STEP 2: Validate Products
         product_ids = [item.product_id for item in transaction_data.items]
         products_dict = TransactionsService._validate_products_exist(db, product_ids)
@@ -316,6 +352,7 @@ class TransactionsService:
             payment_status=payment_status,
             notes=transaction_data.notes,
             product_details_display_mode=transaction_data.product_details_display_mode,
+            tax_type=tax_type,
         )
         db.add(transaction)
         db.flush()  # Needed to get transaction.id for FK references below

@@ -38,6 +38,13 @@ class PaymentStatus(str, enum.Enum):
     unpaid = "unpaid"
 
 
+class TaxType(str, enum.Enum):
+    """Tax type enum - determines IGST vs CGST+SGST split"""
+
+    igst = "igst"          # Inter-state: single IGST
+    cgst_sgst = "cgst_sgst"  # Intra-state: CGST + SGST (each half)
+
+
 class ProductDetailsDisplayMode(str, enum.Enum):
     """Product details display mode for invoice line items"""
 
@@ -132,6 +139,14 @@ class Transaction(BaseModel):
     
     invoice_checksum: Mapped[Optional[str]] = mapped_column(
         String(64), nullable=True, default=None
+    )
+
+    # Tax type: IGST (inter-state) or CGST+SGST (intra-state)
+    tax_type: Mapped[TaxType] = mapped_column(
+        SQLEnum(TaxType, name="tax_type_enum", native_enum=False),
+        nullable=False,
+        default=TaxType.igst,
+        server_default=TaxType.igst.value,
     )
 
     # Product details display mode for invoice generation
