@@ -287,24 +287,15 @@ class InvoiceGenerator:
         y = draw_header(c, is_first_page=True)
         
         # ---------- ITEMS TABLE WITH PAGINATION ----------
-        # Determine tax type for column layout
+        # Determine tax type for summary section
         is_intra_state = transaction.tax_type == TaxType.cgst_sgst
 
-        # Prepare table header based on tax type
-        if is_intra_state:
-            table_header = [
-                ['Sr.\nNo.', 'SKU / Description', 'HSN / SAC', 'Qty', 'Rate',
-                 'CGST\n%', 'CGST\nAmt', 'SGST\n%', 'SGST\nAmt', 'Total']
-            ]
-            # Total = 515pt
-            col_widths = [25, 140, 55, 35, 45, 30, 45, 30, 45, 65]
-        else:
-            table_header = [
-                ['Sr.\nNo.', 'SKU / Description', 'HSN / SAC', 'Qty', 'Rate',
-                 'IGST\n%', 'IGST\nAmount', 'Total']
-            ]
-            # Total = 515pt (A4 width 595 - 40 left margin - 40 right margin)
-            col_widths = [30, 185, 60, 40, 50, 35, 55, 60]
+        # Table header — no per-row tax columns, tax shown only in summary
+        table_header = [
+            ['Sr.\nNo.', 'SKU / Description', 'HSN / SAC', 'Qty', 'Rate', 'Total']
+        ]
+        # Total = 515pt (A4 width 595 - 40 left margin - 40 right margin)
+        col_widths = [30, 240, 70, 50, 60, 65]
         
         # Calculate totals and prepare items data
         items_data = []
@@ -406,57 +397,25 @@ class InvoiceGenerator:
             
             for idx in range(item_index, end_index):
                 item = items_data[idx]
-                if is_intra_state:
-                    table_data.append([
-                        str(idx + 1),
-                        Paragraph(item['name'], sku_cell_style),
-                        item['hsn'],
-                        f"{item['qty']:.2f}",
-                        f"{item['rate']:.2f}",
-                        f"{item['cgst_percent']:.2f}",
-                        f"{item['cgst_amount']:.2f}",
-                        f"{item['sgst_percent']:.2f}",
-                        f"{item['sgst_amount']:.2f}",
-                        f"{item['total']:.2f}"
-                    ])
-                else:
-                    table_data.append([
-                        str(idx + 1),
-                        Paragraph(item['name'], sku_cell_style),
-                        item['hsn'],
-                        f"{item['qty']:.2f}",
-                        f"{item['rate']:.2f}",
-                        f"{item['igst_percent']:.2f}",
-                        f"{item['igst_amount']:.2f}",
-                        f"{item['total']:.2f}"
-                    ])
+                table_data.append([
+                    str(idx + 1),
+                    Paragraph(item['name'], sku_cell_style),
+                    item['hsn'],
+                    f"{item['qty']:.2f}",
+                    f"{item['rate']:.2f}",
+                    f"{item['total']:.2f}"
+                ])
 
             # Add total row only on the last page
             if end_index == len(items_data):
-                if is_intra_state:
-                    table_data.append([
-                        '',
-                        Paragraph('Total', sku_cell_bold_style),
-                        '',
-                        f"{float(total_qty):.2f}",
-                        '',
-                        '',
-                        f"{float(total_cgst):.2f}",
-                        '',
-                        f"{float(total_sgst):.2f}",
-                        f"{float(transaction.total_amount):.2f}"
-                    ])
-                else:
-                    table_data.append([
-                        '',
-                        Paragraph('Total', sku_cell_bold_style),
-                        '',
-                        f"{float(total_qty):.2f}",
-                        '',
-                        '',
-                        f"{float(transaction.tax_amount):.2f}",
-                        f"{float(transaction.total_amount):.2f}"
-                    ])
+                table_data.append([
+                    '',
+                    Paragraph('Total', sku_cell_bold_style),
+                    '',
+                    f"{float(total_qty):.2f}",
+                    '',
+                    f"{float(transaction.total_amount):.2f}"
+                ])
             
             # Create and style table
             table = Table(table_data, colWidths=col_widths)
