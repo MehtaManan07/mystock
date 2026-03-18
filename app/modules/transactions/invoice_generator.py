@@ -479,15 +479,15 @@ class InvoiceGenerator:
         summary_y -= 15
 
         if is_intra_state:
-            c.drawString(summary_x, summary_y, f"Add : CGST")
+            c.drawString(summary_x, summary_y, f"Add : CGST @ {half_percent:.2f}%")
             c.drawString(summary_x + 120, summary_y, f"{float(total_cgst):.2f}")
             summary_y -= 15
 
-            c.drawString(summary_x, summary_y, f"Add : SGST")
+            c.drawString(summary_x, summary_y, f"Add : SGST @ {half_percent:.2f}%")
             c.drawString(summary_x + 120, summary_y, f"{float(total_sgst):.2f}")
             summary_y -= 15
         else:
-            c.drawString(summary_x, summary_y, f"Add : IGST")
+            c.drawString(summary_x, summary_y, f"Add : IGST @ {igst_percent:.2f}%")
             c.drawString(summary_x + 120, summary_y, f"{float(transaction.tax_amount):.2f}")
             summary_y -= 15
 
