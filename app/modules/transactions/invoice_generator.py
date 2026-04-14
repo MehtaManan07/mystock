@@ -313,32 +313,31 @@ class InvoiceGenerator:
         half_rate = igst_rate / Decimal('2')
         half_percent = igst_percent / 2
 
+        # Batch-fetch vendor SKUs for all items in 1 query instead of N
+        display_mode = transaction.product_details_display_mode
+        vendor_sku_map: dict = {}
+        if display_mode == ProductDetailsDisplayMode.customer_sku:
+            item_product_ids = [item.product_id for item in transaction.items]
+            vendor_skus = db.query(VendorProductSku).filter(
+                and_(
+                    VendorProductSku.product_id.in_(item_product_ids),
+                    VendorProductSku.vendor_id == transaction.contact_id,
+                    VendorProductSku.deleted_at.is_(None),
+                )
+            ).all()
+            vendor_sku_map = {vs.product_id: vs.vendor_sku for vs in vendor_skus}
+
         for item in transaction.items:
             # Calculate: Rate * Quantity = Taxable Value
             rate_total = item.unit_price * item.quantity
             igst_amount = rate_total * igst_rate
             total_amount_item = rate_total + igst_amount
-            
+
             # Get display text based on transaction's product_details_display_mode
-            display_mode = transaction.product_details_display_mode
-            
             if display_mode == ProductDetailsDisplayMode.customer_sku:
-                # Try customer-specific SKU first, fallback to company SKU, then product name
-                vendor_sku_mapping = db.query(VendorProductSku).filter(
-                    and_(
-                        VendorProductSku.product_id == item.product_id,
-                        VendorProductSku.vendor_id == transaction.contact_id,
-                        VendorProductSku.deleted_at.is_(None),
-                    )
-                ).first()
-                
-                if vendor_sku_mapping:
-                    sku_display = vendor_sku_mapping.vendor_sku
-                elif item.product.company_sku:
-                    sku_display = item.product.company_sku
-                else:
-                    sku_display = item.product.name
-            
+                # Use batch-fetched vendor SKU, fallback to company SKU, then product name
+                sku_display = vendor_sku_map.get(item.product_id) or item.product.company_sku or item.product.name
+
             elif display_mode == ProductDetailsDisplayMode.company_sku:
                 # Use company SKU, fallback to product name
                 sku_display = item.product.company_sku or item.product.name
