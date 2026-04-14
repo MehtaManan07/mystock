@@ -199,7 +199,10 @@ class ContainerProductService:
             query = (
                 select(ContainerProduct)
                 .join(ContainerProduct.product)
-                .where(ContainerProduct.container_id == container_id)
+                .where(
+                    ContainerProduct.container_id == container_id,
+                    ContainerProduct.deleted_at.is_(None),
+                )
                 .options(
                     selectinload(ContainerProduct.product),
                     selectinload(ContainerProduct.container),

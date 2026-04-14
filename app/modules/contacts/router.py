@@ -4,7 +4,7 @@ Demonstrates CRUD operations with run_db pattern.
 """
 
 from typing import List
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.core.response_interceptor import skip_interceptor
 from .service import ContactsService
@@ -20,25 +20,33 @@ async def create_contact(create_dto: CreateContactDto):
     return contact
 
 
-@router.get("", response_model=List[ContactResponse])
-async def get_all_contacts(filters: FilterContactsDto = Depends()):
+@router.get("")
+async def get_all_contacts(
+    filters: FilterContactsDto = Depends(),
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(25, ge=1, le=100, description="Items per page"),
+):
     """
-    Get all contacts with optional filters.
-    
+    Get all contacts with optional filters and pagination.
+
     Query parameters:
     - types: Filter by contact type(s). Can pass multiple: ?types=customer&types=supplier
     - balance: Filter by balance type - 'positive' for receivables, 'negative' for payables
     - search: Search by name or phone
-    
+    - page: Page number (default 1)
+    - page_size: Items per page (default 25, max 100)
+
     Examples:
-    - GET /contacts - Get all active contacts
+    - GET /contacts - Get all active contacts (page 1)
     - GET /contacts?types=customer - Get all customers
     - GET /contacts?balance=positive - Get all receivables
     - GET /contacts?types=supplier&balance=negative - Get suppliers you owe
     - GET /contacts?search=John - Search by name or phone
+    - GET /contacts?page=2&page_size=10 - Get page 2 with 10 items
     """
-    contacts = await ContactsService.find_all(filters=filters)
-    return contacts
+    return await ContactsService.find_all_paginated(
+        page=page, page_size=page_size, filters=filters
+    )
 
 
 @router.get("/{contact_id}", response_model=ContactResponse)

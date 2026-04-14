@@ -86,13 +86,15 @@ async def create_manual_payment(
     return payment
 
 
-@router.get("", response_model=List[ManualPaymentListItemResponse])
+@router.get("")
 async def get_all_manual_payments(
     filters: FilterManualPaymentsDto = Depends(),
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(25, ge=1, le=100, description="Items per page"),
     current_user: TokenData = Depends(require_any_role)
 ):
     """
-    Get all payments with optional filters. (Requires authentication)
+    Get all payments with optional filters and pagination. (Requires authentication)
 
     By default, returns ALL payments (both manual and transaction-linked).
     Use `manual_only=true` to get only manual payments.
@@ -108,16 +110,20 @@ async def get_all_manual_payments(
     - min_amount: Minimum amount
     - max_amount: Maximum amount
     - search: Search in description
+    - page: Page number (default 1)
+    - page_size: Items per page (default 25, max 100)
 
     Examples:
-    - GET /payments - Get all payments
+    - GET /payments - Get all payments (page 1)
     - GET /payments?manual_only=true - Get only manual payments
     - GET /payments?transaction_id=123 - Get payments for transaction #123
     - GET /payments?category=rent - Get all rent payments
     - GET /payments?from_date=2024-01-01&to_date=2024-12-31 - Get payments for 2024
+    - GET /payments?page=2&page_size=10 - Get page 2 with 10 items
     """
-    payments = await PaymentsService.find_all(filters=filters)
-    return payments
+    return await PaymentsService.find_all_paginated(
+        page=page, page_size=page_size, filters=filters
+    )
 
 
 @router.get("/summary", response_model=PaymentSummaryResponse)

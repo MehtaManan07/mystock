@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db.engine import run_db
 from app.core.exceptions import NotFoundError, ValidationError
+from app.core.pagination import paginate_query, build_paginated_response
 from .models import Payment, SUGGESTED_PAYMENT_CATEGORIES
 from .schemas import CreateManualPaymentDto, UpdateManualPaymentDto, FilterManualPaymentsDto, PaymentSummaryResponse
 
@@ -186,6 +187,66 @@ class PaymentsService:
             payments = result.scalars().all()
             return list(payments)
         return await run_db(_find_all)
+
+    @staticmethod
+    async def find_all_paginated(
+        page: int = 1,
+        page_size: int = 25,
+        filters: Optional[FilterManualPaymentsDto] = None,
+    ) -> dict:
+        """
+        Find all payments with optional filters and server-side pagination.
+
+        Args:
+            page: Page number (1-indexed)
+            page_size: Items per page
+            filters: Optional DTO containing filter criteria
+
+        Returns:
+            Paginated response dict with items, total, page, page_size, total_pages, has_more
+        """
+        def _find_all_paginated(db: Session) -> dict:
+            query = select(Payment).where(Payment.deleted_at.is_(None))
+
+            if filters:
+                if filters.manual_only:
+                    query = query.where(Payment.transaction_id.is_(None))
+
+                if filters.transaction_id:
+                    query = query.where(Payment.transaction_id == filters.transaction_id)
+
+                if getattr(filters, "type", None):
+                    query = query.where(Payment.type == filters.type)
+
+                if filters.category:
+                    query = query.where(Payment.category == filters.category)
+
+                if filters.payment_method:
+                    query = query.where(Payment.payment_method == filters.payment_method)
+
+                if filters.contact_id:
+                    query = query.where(Payment.contact_id == filters.contact_id)
+
+                if filters.from_date:
+                    query = query.where(Payment.payment_date >= filters.from_date)
+                if filters.to_date:
+                    query = query.where(Payment.payment_date <= filters.to_date)
+
+                if filters.min_amount is not None:
+                    query = query.where(Payment.amount >= filters.min_amount)
+                if filters.max_amount is not None:
+                    query = query.where(Payment.amount <= filters.max_amount)
+
+                if filters.search:
+                    query = query.where(
+                        Payment.description.ilike(f"%{filters.search}%")
+                    )
+
+            query = query.order_by(Payment.payment_date.desc(), Payment.id.desc())
+
+            items, total = paginate_query(db, query, page, page_size)
+            return build_paginated_response(list(items), total, page, page_size)
+        return await run_db(_find_all_paginated)
 
     @staticmethod
     async def find_one(payment_id: int) -> Payment:

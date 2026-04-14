@@ -116,9 +116,6 @@ class Payment(BaseModel):
 
     # Explicit type for classifying as income or expense (string)
     type: Mapped[str] = mapped_column(String(16), nullable=False, index=True, server_default='expense')
-    __table_args__ = (
-        Index("idx_payment_type", "type"),
-    )
 
     # Category - free text field (users can add their own categories)
     category: Mapped[Optional[str]] = mapped_column(

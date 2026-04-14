@@ -73,7 +73,7 @@ async def create_purchase(
     return transaction
 
 
-@router.get("", response_model=List[TransactionResponse])
+@router.get("")
 async def list_transactions(
     type: str | None = Query(None, description="Filter by type: sale or purchase"),
     payment_status: str | None = Query(
@@ -85,10 +85,12 @@ async def list_transactions(
     search: str | None = Query(
         None, description="Search in transaction number or notes"
     ),
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(25, ge=1, le=100, description="Items per page"),
     current_user: TokenData = Depends(require_any_role)
 ):
     """
-    List all transactions with optional filters. (Requires authentication)
+    List all transactions with optional filters and pagination. (Requires authentication)
 
     Query parameters:
     - type: Filter by transaction type (sale, purchase)
@@ -97,16 +99,19 @@ async def list_transactions(
     - from_date: Start date (YYYY-MM-DD)
     - to_date: End date (YYYY-MM-DD)
     - search: Search in transaction number or notes
+    - page: Page number (default 1)
+    - page_size: Items per page (default 25, max 100)
 
     Examples:
-    - GET /transactions - Get all transactions
+    - GET /transactions - Get all transactions (page 1)
     - GET /transactions?type=sale - Get all sales
     - GET /transactions?payment_status=unpaid - Get unpaid transactions
     - GET /transactions?contact_id=5 - Get transactions for specific contact
     - GET /transactions?from_date=2025-01-01&to_date=2025-01-31 - Get January transactions
     - GET /transactions?search=SALE-0001 - Search by transaction number
+    - GET /transactions?page=2&page_size=10 - Get page 2 with 10 items
 
-    Returns transactions ordered by date (newest first).
+    Returns paginated transactions ordered by date (newest first).
     """
     from datetime import date as date_type
     from .models import TransactionType, PaymentStatus
@@ -126,8 +131,9 @@ async def list_transactions(
         search=search,
     )
 
-    transactions = await TransactionsService.list_transactions(filters)
-    return transactions
+    return await TransactionsService.list_transactions_paginated(
+        page=page, page_size=page_size, filters=filters
+    )
 
 
 @router.get("/{transaction_id}", response_model=TransactionResponse)

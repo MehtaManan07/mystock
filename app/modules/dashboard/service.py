@@ -21,6 +21,7 @@ from app.modules.containers.models import Container
 from app.modules.contacts.models import Contact
 from app.modules.transactions.models import Transaction
 from app.modules.container_products.models import ContainerProduct
+from app.modules.payments.models import Payment
 
 
 class DashboardService:
@@ -34,60 +35,40 @@ class DashboardService:
         """
         Get all dashboard data in optimized queries.
         Returns aggregated stats, financial overview, recent transactions, and outstanding balances.
+
+        Optimized: 6 scalar subqueries combined into 1 DB roundtrip,
+        plus 2 list queries = 3 total queries instead of 8.
         """
 
         def _get_dashboard(db: Session) -> DashboardResponse:
-            # 1. Get basic counts
-            total_products = db.scalar(
-                select(func.count(Product.id)).where(Product.deleted_at.is_(None))
-            ) or 0
-            
-            total_containers = db.scalar(
-                select(func.count(Container.id)).where(Container.deleted_at.is_(None))
-            ) or 0
-            
-            total_contacts = db.scalar(
-                select(func.count(Contact.id)).where(Contact.deleted_at.is_(None))
-            ) or 0
-            
-            # 2. Get total inventory quantity
-            total_inventory = db.scalar(
-                select(func.sum(ContainerProduct.quantity)).where(
-                    ContainerProduct.deleted_at.is_(None)
-                )
-            ) or 0
-            
+            # 1. Combine all scalar stats + financial into a single DB roundtrip
+            #    using scalar subqueries (6 stats in 1 query instead of 6 separate queries)
+            combined_query = select(
+                select(func.count(Product.id)).where(Product.deleted_at.is_(None)).correlate(None).scalar_subquery().label('total_products'),
+                select(func.count(Container.id)).where(Container.deleted_at.is_(None)).correlate(None).scalar_subquery().label('total_containers'),
+                select(func.count(Contact.id)).where(Contact.deleted_at.is_(None)).correlate(None).scalar_subquery().label('total_contacts'),
+                select(func.coalesce(func.sum(ContainerProduct.quantity), 0)).where(ContainerProduct.deleted_at.is_(None)).correlate(None).scalar_subquery().label('total_inventory'),
+                select(func.coalesce(func.sum(Payment.amount), 0)).where(Payment.deleted_at.is_(None), Payment.type == 'income').correlate(None).scalar_subquery().label('total_income'),
+                select(func.coalesce(func.sum(Payment.amount), 0)).where(Payment.deleted_at.is_(None), Payment.type == 'expense').correlate(None).scalar_subquery().label('total_expenses'),
+            )
+            row = db.execute(combined_query).one()
+
             stats = DashboardStatsResponse(
-                total_products=total_products,
-                total_containers=total_containers,
-                total_contacts=total_contacts,
-                total_inventory=int(total_inventory),
+                total_products=row.total_products or 0,
+                total_containers=row.total_containers or 0,
+                total_contacts=row.total_contacts or 0,
+                total_inventory=int(row.total_inventory),
             )
-            
-            # 3. Get financial overview from payments
-            from app.modules.payments.models import Payment
-            
-            # Total income (transaction payments for sales + manual income payments)
-            total_earnings_query = select(func.sum(Payment.amount)).where(
-                Payment.deleted_at.is_(None),
-                Payment.type == 'income'
-            )
-            total_earnings = db.scalar(total_earnings_query) or Decimal('0')
-            
-            # Total expenses (transaction payments for purchases + manual expense payments)
-            total_spends_query = select(func.sum(Payment.amount)).where(
-                Payment.deleted_at.is_(None),
-                Payment.type == 'expense'
-            )
-            total_spends = db.scalar(total_spends_query) or Decimal('0')
-            
+
+            total_earnings = Decimal(str(row.total_income))
+            total_spends = Decimal(str(row.total_expenses))
             financial_overview = DashboardFinancialOverviewResponse(
                 total_income=total_earnings,
                 total_expenses=total_spends,
                 net_balance=total_earnings - total_spends,
             )
-            
-            # 4. Get recent transactions (last 5)
+
+            # 2. Get recent transactions (last 5)
             recent_txns_query = (
                 select(Transaction)
                 .where(Transaction.deleted_at.is_(None))

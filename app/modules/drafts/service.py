@@ -3,7 +3,7 @@ DraftsService - Business logic for managing transaction drafts
 """
 
 from typing import List, Optional
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 from sqlalchemy.orm import Session
 
 from app.core.db.engine import run_db
@@ -214,16 +214,21 @@ class DraftsService:
                 )
                 products_result = db.execute(products_query)
                 products = products_result.scalars().all()
-                
-                # Calculate total quantity for each product
+
+                # Batch calculate total quantities — 1 query instead of N
+                qty_query = select(
+                    ContainerProduct.product_id,
+                    func.sum(ContainerProduct.quantity).label('total_qty')
+                ).where(
+                    ContainerProduct.product_id.in_(product_ids),
+                    ContainerProduct.deleted_at.is_(None)
+                ).group_by(ContainerProduct.product_id)
+                qty_map = {
+                    row.product_id: int(row.total_qty)
+                    for row in db.execute(qty_query).all()
+                }
+
                 for product in products:
-                    total_qty_query = select(ContainerProduct.quantity).where(
-                        ContainerProduct.product_id == product.id
-                    )
-                    qty_result = db.execute(total_qty_query)
-                    quantities = qty_result.scalars().all()
-                    total_quantity = sum(quantities) if quantities else 0
-                    
                     products_dict[product.id] = {
                         'id': product.id,
                         'name': product.name,
@@ -241,9 +246,9 @@ class DraftsService:
                         'deleted_at': product.deleted_at,
                         'created_at': product.created_at,
                         'updated_at': product.updated_at,
-                        'totalQuantity': total_quantity,
+                        'totalQuantity': qty_map.get(product.id, 0),
                     }
-            
+
             # Batch fetch all containers
             containers_dict = {}
             if container_ids:
@@ -253,15 +258,21 @@ class DraftsService:
                 )
                 containers_result = db.execute(containers_query)
                 containers = containers_result.scalars().all()
-                
-                # Calculate product count for each container
+
+                # Batch calculate product counts — 1 query instead of N
+                count_query = select(
+                    ContainerProduct.container_id,
+                    func.count(ContainerProduct.id).label('product_count')
+                ).where(
+                    ContainerProduct.container_id.in_(container_ids),
+                    ContainerProduct.deleted_at.is_(None)
+                ).group_by(ContainerProduct.container_id)
+                count_map = {
+                    row.container_id: int(row.product_count)
+                    for row in db.execute(count_query).all()
+                }
+
                 for container in containers:
-                    product_count_query = select(ContainerProduct).where(
-                        ContainerProduct.container_id == container.id
-                    )
-                    count_result = db.execute(product_count_query)
-                    product_count = len(count_result.scalars().all())
-                    
                     containers_dict[container.id] = {
                         'id': container.id,
                         'name': container.name,
@@ -269,7 +280,7 @@ class DraftsService:
                         'deleted_at': container.deleted_at,
                         'created_at': container.created_at,
                         'updated_at': container.updated_at,
-                        'productCount': product_count,
+                        'productCount': count_map.get(container.id, 0),
                     }
             
             # Build hydrated items

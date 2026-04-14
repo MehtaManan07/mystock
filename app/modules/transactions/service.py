@@ -179,21 +179,22 @@ class TransactionsService:
         """
         prefix = "SALE" if transaction_type == TransactionType.sale else "PUR"
 
+        # Select only the column we need — avoids loading the full entity
+        # which would trigger joined eager loads across 5 tables
         query = (
-            select(Transaction)
+            select(Transaction.transaction_number)
             .where(Transaction.type == transaction_type)
             .order_by(desc(Transaction.id))
             .limit(1)
         )
 
-        result = db.execute(query)
-        last_transaction = result.unique().scalar_one_or_none()
+        last_txn_number = db.execute(query).scalar_one_or_none()
 
-        if not last_transaction:
+        if not last_txn_number:
             return f"{prefix}-0001"
 
         try:
-            last_number = int(last_transaction.transaction_number.split("-")[1])
+            last_number = int(last_txn_number.split("-")[1])
             new_number = last_number + 1
             return f"{prefix}-{new_number:04d}"
         except (IndexError, ValueError):
@@ -639,6 +640,53 @@ class TransactionsService:
             transactions = result.scalars().all()
             return list(transactions)
         return await run_db(_list_transactions)
+
+    @staticmethod
+    async def list_transactions_paginated(
+        page: int = 1,
+        page_size: int = 25,
+        filters: Optional[TransactionFilterDto] = None,
+    ) -> dict:
+        """
+        List transactions with optional filters and server-side pagination.
+        """
+        from app.core.pagination import paginate_query, build_paginated_response
+
+        def _list_transactions_paginated(db: Session) -> dict:
+            query = (
+                select(Transaction)
+                .options(
+                    selectinload(Transaction.contact),
+                    selectinload(Transaction.items).selectinload(TransactionItem.product),
+                    selectinload(Transaction.items).selectinload(TransactionItem.container),
+                    selectinload(Transaction.payments),
+                )
+                .where(Transaction.deleted_at.is_(None))
+            )
+
+            if filters:
+                if filters.type:
+                    query = query.where(Transaction.type == filters.type)
+                if filters.payment_status:
+                    query = query.where(Transaction.payment_status == filters.payment_status)
+                if filters.contact_id:
+                    query = query.where(Transaction.contact_id == filters.contact_id)
+                if filters.from_date:
+                    query = query.where(Transaction.transaction_date >= filters.from_date)
+                if filters.to_date:
+                    query = query.where(Transaction.transaction_date <= filters.to_date)
+                if filters.search:
+                    search_pattern = f"%{filters.search}%"
+                    query = query.where(
+                        (Transaction.transaction_number.ilike(search_pattern))
+                        | (Transaction.notes.ilike(search_pattern))
+                    )
+
+            query = query.order_by(desc(Transaction.transaction_date), desc(Transaction.id))
+
+            items, total = paginate_query(db, query, page, page_size)
+            return build_paginated_response(list(items), total, page, page_size)
+        return await run_db(_list_transactions_paginated)
 
     @staticmethod
     async def delete_transaction(transaction_id: int) -> None:

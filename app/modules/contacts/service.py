@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db.engine import run_db
 from app.core.exceptions import NotFoundError, ValidationError
+from app.core.pagination import paginate_query, build_paginated_response
 from .models import Contact, ContactType
 from .schemas import CreateContactDto, UpdateContactDto, FilterContactsDto
 
@@ -74,6 +75,47 @@ class ContactsService:
             contacts = result.scalars().all()
             return list(contacts)
         return await run_db(_find_all)
+
+    @staticmethod
+    async def find_all_paginated(
+        page: int = 1,
+        page_size: int = 25,
+        filters: Optional[FilterContactsDto] = None,
+    ) -> dict:
+        """
+        Find all contacts with optional filters and server-side pagination.
+
+        Args:
+            page: Page number (1-indexed)
+            page_size: Items per page
+            filters: Optional DTO containing filter criteria
+
+        Returns:
+            Paginated response dict with items, total, page, page_size, total_pages, has_more
+        """
+        def _find_all_paginated(db: Session) -> dict:
+            query = select(Contact).where(Contact.deleted_at.is_(None))
+
+            if filters:
+                if filters.types:
+                    query = query.where(Contact.type.in_(filters.types))
+
+                if filters.balance == "positive":
+                    query = query.where(Contact.balance > 0)
+                elif filters.balance == "negative":
+                    query = query.where(Contact.balance < 0)
+
+                if filters.search:
+                    query = query.where(
+                        Contact.name.ilike(f"%{filters.search}%")
+                        | Contact.phone.ilike(f"%{filters.search}%")
+                    )
+
+            query = query.order_by(Contact.name.asc())
+
+            items, total = paginate_query(db, query, page, page_size)
+            return build_paginated_response(list(items), total, page, page_size)
+        return await run_db(_find_all_paginated)
 
     @staticmethod
     async def find_one(contact_id: int) -> Contact:
