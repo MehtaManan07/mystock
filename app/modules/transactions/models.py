@@ -234,6 +234,23 @@ class TransactionItem(BaseModel):
         nullable=False,
     )
 
+    # GST rate applied to this line, as a total percentage (e.g. 18.00 or 5.00).
+    # Snapshotted at transaction time so later changes to the product master
+    # never alter an already-issued invoice. Null on rows created before
+    # per-item tax was supported.
+    tax_rate: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(precision=5, scale=2),
+        nullable=True,
+        default=None,
+    )
+
+    # Tax charged on this line: line_total * tax_rate / 100, rounded to paise.
+    tax_amount: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(precision=15, scale=2),
+        nullable=True,
+        default=None,
+    )
+
     # Relationships
     transaction: Mapped["Transaction"] = relationship(
         "Transaction", back_populates="items"

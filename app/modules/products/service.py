@@ -49,6 +49,8 @@ class ProductService:
                 tags=dto.tags,
                 product_type=dto.product_type,
                 dimensions=dto.dimensions,
+                gst_rate=dto.gst_rate,
+                hsn_code=dto.hsn_code,
             )
             db.add(product)
             db.flush()
@@ -83,6 +85,8 @@ class ProductService:
                     tags=item.tags,
                     product_type=item.product_type,
                     dimensions=item.dimensions,
+                    gst_rate=item.gst_rate,
+                    hsn_code=item.hsn_code,
                 )
                 for item in data.data
             ]

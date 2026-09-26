@@ -24,6 +24,15 @@ class TransactionItemCreate(BaseModel):
     unit_price: Decimal = Field(
         ..., ge=0, description="Unit price per item (can be 0 for free items)"
     )
+    tax_rate: Optional[Decimal] = Field(
+        None,
+        ge=0,
+        le=100,
+        description=(
+            "Total GST percentage for this line (e.g. 18 or 5). "
+            "Falls back to the product's gst_rate when omitted."
+        ),
+    )
 
     class Config:
         from_attributes = True
@@ -39,7 +48,12 @@ class CreateTransactionDto(BaseModel):
     )
 
     tax_amount: Decimal = Field(
-        default=Decimal("0.0"), ge=0, description="Tax/GST amount"
+        default=Decimal("0.0"),
+        ge=0,
+        description=(
+            "Tax/GST amount for the whole transaction. Ignored when any line "
+            "resolves its own tax rate — in that case tax is the sum of line taxes."
+        ),
     )
     discount_amount: Decimal = Field(
         default=Decimal("0.0"), ge=0, description="Discount amount"
@@ -179,6 +193,8 @@ class TransactionItemResponse(BaseModel):
     quantity: int
     unit_price: Decimal
     line_total: Decimal
+    tax_rate: Optional[Decimal] = None
+    tax_amount: Optional[Decimal] = None
     created_at: datetime
     updated_at: datetime
 

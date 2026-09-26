@@ -23,6 +23,8 @@ class CreateProductDto(BaseModel):
     tags: Optional[List[str]] = Field(None, description="Product tags")
     product_type: Optional[str] = Field(None, max_length=255, description="Product category/type")
     dimensions: Optional[Dict[str, Any]] = Field(None, description="Product dimensions (width, height, length in cm)")
+    gst_rate: Optional[Decimal] = Field(None, ge=0, le=100, description="Total GST percentage (e.g. 18 or 5)")
+    hsn_code: Optional[str] = Field(None, max_length=20, description="HSN/SAC code")
 
     @field_validator('dimensions')
     @classmethod
@@ -65,6 +67,8 @@ class UpdateProductDto(BaseModel):
     tags: Optional[List[str]] = Field(None, description="Product tags")
     product_type: Optional[str] = Field(None, max_length=255, description="Product category/type")
     dimensions: Optional[Dict[str, Any]] = Field(None, description="Product dimensions (width, height, length in cm)")
+    gst_rate: Optional[Decimal] = Field(None, ge=0, le=100, description="Total GST percentage (e.g. 18 or 5)")
+    hsn_code: Optional[str] = Field(None, max_length=20, description="HSN/SAC code")
 
     @field_validator('dimensions')
     @classmethod
@@ -99,6 +103,8 @@ class ProductResponse(BaseModel):
     tags: Optional[List[str]] = None
     product_type: Optional[str] = None
     dimensions: Optional[Dict[str, Any]] = None
+    gst_rate: Optional[Decimal] = None
+    hsn_code: Optional[str] = None
     deleted_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
@@ -207,6 +213,8 @@ class ProductDetailResponse(BaseModel):
     tags: Optional[List[str]] = None
     product_type: Optional[str] = None
     dimensions: Optional[Dict[str, Any]] = None
+    gst_rate: Optional[Decimal] = None
+    hsn_code: Optional[str] = None
     deleted_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime

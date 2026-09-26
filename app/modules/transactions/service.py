@@ -7,6 +7,7 @@ from typing import List, Optional, Dict, Tuple, cast, Union
 from datetime import date
 from decimal import Decimal
 import math
+import logging
 from sqlalchemy import select, func, desc, tuple_, insert as sa_insert, update as sa_update, case as sa_case
 from sqlalchemy.orm import Session, selectinload
 
@@ -25,6 +26,7 @@ from .schemas import (
     CreatePurchaseDto,
     CreatePaymentDto,
     TransactionFilterDto,
+    TransactionItemCreate,
 )
 from app.modules.contacts.models import Contact, ContactType
 from app.modules.products.models import Product
@@ -32,6 +34,7 @@ from app.modules.containers.models import Container
 from app.modules.settings.models import CompanySettings
 from app.modules.container_products.models import ContainerProduct
 from app.modules.inventory_logs.models import InventoryLog
+from app.modules.pdf_invoices.models import PdfInvoice
 
 
 # Import invoice service for background invoice generation
@@ -108,6 +111,68 @@ class TransactionsService:
             raise NotFoundError("Products", list(missing_ids))
 
         return {p.id: p for p in products}
+
+    @staticmethod
+    def _calculate_line_taxes(
+        items: List[TransactionItemCreate],
+        products_dict: Dict[int, Product],
+        fallback_tax_amount: Decimal,
+        subtotal: Decimal,
+    ) -> List[Tuple[Optional[Decimal], Decimal]]:
+        """
+        Resolve the GST rate and tax amount for every line item.
+
+        Rate resolution, per line:
+        1. An explicit tax_rate on the line
+        2. The product master's gst_rate
+        3. None
+
+        If at least one line resolves a rate, tax is charged per line at that rate
+        (lines without a rate are taxed at 0) and the caller's transaction-level
+        tax_amount is ignored. This is what keeps mixed-slab invoices correct.
+
+        If no line resolves a rate we are in the legacy path: the caller's
+        transaction-level tax_amount stands and is spread across lines in
+        proportion to their value, so item snapshots are still populated. Any
+        rounding remainder lands on the last line so the parts sum to the whole.
+
+        Returns a list of (tax_rate, tax_amount) aligned with `items`.
+        """
+        cent = Decimal("0.01")
+
+        resolved_rates: List[Optional[Decimal]] = []
+        for item in items:
+            rate = item.tax_rate
+            if rate is None:
+                product = products_dict.get(item.product_id)
+                rate = product.gst_rate if product is not None else None
+            resolved_rates.append(rate)
+
+        if any(rate is not None for rate in resolved_rates):
+            results: List[Tuple[Optional[Decimal], Decimal]] = []
+            for item, rate in zip(items, resolved_rates):
+                effective_rate = rate if rate is not None else Decimal("0")
+                line_total = item.quantity * item.unit_price
+                line_tax = (line_total * effective_rate / Decimal("100")).quantize(cent)
+                results.append((effective_rate, line_tax))
+            return results
+
+        # Legacy path — single transaction-level tax amount spread across lines.
+        if not fallback_tax_amount or subtotal <= 0:
+            return [(None, Decimal("0.00")) for _ in items]
+
+        blended_rate = (fallback_tax_amount / subtotal * Decimal("100")).quantize(cent)
+        results = []
+        allocated = Decimal("0")
+        for index, item in enumerate(items):
+            line_total = item.quantity * item.unit_price
+            if index == len(items) - 1:
+                line_tax = fallback_tax_amount - allocated
+            else:
+                line_tax = (fallback_tax_amount * line_total / subtotal).quantize(cent)
+                allocated += line_tax
+            results.append((blended_rate, line_tax))
+        return results
 
     @staticmethod
     def _validate_and_get_stock(
@@ -190,15 +255,18 @@ class TransactionsService:
 
         last_txn_number = db.execute(query).scalar_one_or_none()
 
-        if not last_txn_number:
-            return f"{prefix}-0001"
-
-        try:
-            last_number = int(last_txn_number.split("-")[1])
-            new_number = last_number + 1
-            return f"{prefix}-{new_number:04d}"
-        except (IndexError, ValueError):
-            return f"{prefix}-0001"
+        new_number = 1
+        if last_txn_number:
+            try:
+                new_number = int(last_txn_number.split("-")[1]) + 1
+            except (IndexError, ValueError):
+                logging.getLogger(__name__).warning("Unrecognized transaction number: %s", last_txn_number)
+        reserved = set(db.scalars(
+            select(PdfInvoice.invoice_number).where(PdfInvoice.invoice_number.like(f"{prefix}-%"))
+        ).all())
+        while f"{prefix}-{new_number:04d}" in reserved:
+            new_number += 1
+        return f"{prefix}-{new_number:04d}"
 
     # --- Public async methods ---
 
@@ -319,7 +387,16 @@ class TransactionsService:
 
         # STEP 4: Calculate Totals
         subtotal = sum(item.quantity * item.unit_price for item in transaction_data.items)
-        total_before_rounding = subtotal + transaction_data.tax_amount - transaction_data.discount_amount
+
+        # Per-line tax: each item is taxed at its own rate rather than one blended
+        # rate across the invoice. An explicit tax_rate on the line wins, otherwise
+        # the product master's gst_rate is used.
+        line_taxes = TransactionsService._calculate_line_taxes(
+            transaction_data.items, products_dict, transaction_data.tax_amount, subtotal
+        )
+        tax_amount = sum((lt[1] for lt in line_taxes), Decimal("0"))
+
+        total_before_rounding = subtotal + tax_amount - transaction_data.discount_amount
         total_amount = Decimal(math.ceil(float(total_before_rounding)))
 
         if transaction_data.paid_amount > total_amount:
@@ -346,7 +423,7 @@ class TransactionsService:
             type=transaction_type,
             contact_id=transaction_data.contact_id,
             subtotal=subtotal,
-            tax_amount=transaction_data.tax_amount,
+            tax_amount=tax_amount,
             discount_amount=transaction_data.discount_amount,
             total_amount=total_amount,
             paid_amount=transaction_data.paid_amount,
@@ -371,7 +448,7 @@ class TransactionsService:
         # New (product_id, container_id) pairs that need INSERT instead of UPDATE (purchase only)
         new_cp_dicts: Dict[Tuple[int, int], int] = {}
 
-        for item in transaction_data.items:
+        for item, (line_tax_rate, line_tax_amount) in zip(transaction_data.items, line_taxes):
             assert item.container_id is not None
             key = (item.product_id, item.container_id)
             delta = -item.quantity if is_sale else item.quantity
@@ -394,6 +471,8 @@ class TransactionsService:
                 "quantity": item.quantity,
                 "unit_price": item.unit_price,
                 "line_total": item.quantity * item.unit_price,
+                "tax_rate": line_tax_rate,
+                "tax_amount": line_tax_amount,
             })
             log_dicts.append({
                 "product_id": item.product_id,

@@ -21,6 +21,7 @@ from app.modules.settings import router as settings_router
 from app.modules.vendor_product_skus import router as vendor_skus_router
 from app.modules.dashboard import router as dashboard_router
 from app.modules.drafts import router as drafts_router
+from app.modules.pdf_invoices.router import router as pdf_invoices_router
 
 # Configure logging to output to console
 logging.basicConfig(
@@ -103,6 +104,7 @@ app.include_router(settings_router, prefix="/api")
 app.include_router(vendor_skus_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
 app.include_router(drafts_router, prefix="/api")
+app.include_router(pdf_invoices_router, prefix="/api")
 
 
 @app.get("/demo")

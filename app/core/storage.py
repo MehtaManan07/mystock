@@ -13,6 +13,10 @@ from google.api_core import exceptions
 from app.core.config import config
 
 
+class ImmutableObjectConflictError(ValueError):
+    """A write-once object key is occupied by different bytes."""
+
+
 class StorageService:
     """
     Generic, type-safe cloud storage service optimized for Google Cloud Storage.
@@ -53,6 +57,8 @@ class StorageService:
         file_key: str,
         content_type: str = "application/pdf",
         metadata: Optional[Dict[str, str]] = None,
+        *,
+        immutable: bool = False,
     ) -> Tuple[str, str]:
         """
         Upload a small file to GCS in a single PUT request.
@@ -79,15 +85,28 @@ class StorageService:
             blob.upload_from_string(
                 file_content,
                 content_type=content_type,
+                **({"if_generation_match": 0} if immutable else {}),
             )
             file_url: str = (
                 f"https://storage.googleapis.com/{cls._bucket_name}/{file_key}"
             )
             return file_url, checksum
+        except exceptions.PreconditionFailed:
+            if not immutable:
+                raise
+            existing = blob.download_as_bytes()
+            if hashlib.sha256(existing).digest() != hashlib.sha256(file_content).digest():
+                raise ImmutableObjectConflictError("An immutable storage object already exists with different content")
+            return cls.get_file_url(file_key), checksum
         except exceptions.GoogleAPIError as e:
+            if immutable:
+                raise
             raise Exception(f"GCS upload failed: {str(e)}") from e
 
-
+    @classmethod
+    def download_file(cls, file_key: str) -> bytes:
+        """Read a server-selected object; callers enforce access and checksum checks."""
+        return cls._get_bucket().blob(file_key).download_as_bytes()
     @classmethod
     def generate_presigned_url(
         cls,

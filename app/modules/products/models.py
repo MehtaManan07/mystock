@@ -97,6 +97,20 @@ class Product(BaseModel):
         JSON, nullable=True, default=None
     )
 
+    # GST fields. gst_rate is the total percentage (e.g. 18.00 or 5.00); for
+    # intra-state sales it is split in half across CGST and SGST at invoice time.
+    # Used as the default rate for transaction line items of this product.
+    gst_rate: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(precision=5, scale=2),
+        nullable=True,
+        default=None,
+    )
+
+    # Per-product HSN/SAC code. Falls back to company_settings.hsn_code when unset.
+    hsn_code: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True, default=None
+    )
+
     # Relationships
     containers: Mapped[list["ContainerProduct"]] = relationship(
         "ContainerProduct", back_populates="product", cascade="all, delete-orphan"

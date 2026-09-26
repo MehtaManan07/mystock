@@ -1,0 +1,1 @@
+"""Standalone PDF invoice archive."""
