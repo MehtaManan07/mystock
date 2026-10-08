@@ -1,22 +1,8 @@
 """Core utility functions for the application"""
 
-from datetime import date, timedelta
+from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Union
-
-
-def calculate_due_date(invoice_date: date, days: int = 15) -> date:
-    """
-    Calculate due date by adding specified days to invoice date.
-
-    Args:
-        invoice_date: The invoice date
-        days: Number of days to add (default: 15)
-
-    Returns:
-        date: The calculated due date
-    """
-    return invoice_date + timedelta(days=days)
 
 
 def amount_to_words(amount: Union[Decimal, float, int]) -> str:

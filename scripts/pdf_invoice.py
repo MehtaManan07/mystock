@@ -48,7 +48,7 @@ def load_seller() -> SimpleNamespace:
         fields = (
             "company_name", "company_address_line1", "company_address_line2",
             "company_address_line3", "seller_gstin", "seller_phone", "seller_email",
-            "terms_and_conditions",
+            "terms_and_conditions", "bank_name", "bank_account_number", "bank_branch", "bank_ifsc",
         )
         seller = SimpleNamespace(**{key: getattr(settings, key) for key in fields}, hsn_code="-")
         db.rollback()

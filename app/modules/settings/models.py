@@ -71,6 +71,11 @@ class CompanySettings(BaseModel):
         server_default="44111200",
     )
 
+    bank_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    bank_account_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    bank_branch: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    bank_ifsc: Mapped[Optional[str]] = mapped_column(String(11), nullable=True)
+
     # Only one active settings record should exist
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, index=True

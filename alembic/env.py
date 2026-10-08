@@ -23,6 +23,7 @@ from app.modules.transactions.models import Transaction, TransactionItem
 from app.modules.payments.models import Payment
 from app.modules.drafts.models import Draft
 from app.modules.pdf_invoices.models import PdfInvoice
+from app.modules.settings.models import CompanySettings
 
 # Load .env
 load_dotenv()

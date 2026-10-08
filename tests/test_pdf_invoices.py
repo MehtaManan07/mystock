@@ -1,6 +1,6 @@
 """Offline regression cases; no production credentials, cloud or database calls."""
 import asyncio
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 import hashlib
 import os
@@ -253,6 +253,32 @@ class RegisterTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(StorageService, "download_file", return_value=b"wrong"):
             with self.assertRaises(ConflictError):
                 await PdfInvoiceService.download(first.id)
+
+    async def test_list_orders_by_date_added_with_stable_pagination_and_invoice_date_filters(self):
+        first = await self.register(metadata(invoice_date="2026-09-25"))
+        second = await self.register(metadata(invoice_number="37", invoice_date="2026-09-24"),
+                                     b"%PDF-1.4\nsecond\n%%EOF")
+        third = await self.register(metadata(invoice_number="38", invoice_date="2026-10-08"),
+                                    b"%PDF-1.4\nthird\n%%EOF")
+        with Session(self.engine) as db:
+            db.get(PdfInvoice, first.id).created_at = datetime(2026, 10, 8, 10)
+            db.get(PdfInvoice, second.id).created_at = datetime(2026, 10, 8, 10)
+            db.get(PdfInvoice, third.id).created_at = datetime(2026, 10, 7, 10)
+            db.get(PdfInvoice, third.id).updated_at = datetime(2026, 10, 9, 10)
+            db.commit()
+
+        page = await PdfInvoiceService.list_invoices(1, 2, None, None, None)
+        self.assertEqual([row.id for row in page.items], [second.id, first.id])
+        self.assertEqual((page.total, page.has_more), (3, True))
+        next_page = await PdfInvoiceService.list_invoices(2, 2, None, None, None)
+        self.assertEqual([row.id for row in next_page.items], [third.id])
+        self.assertEqual((next_page.total, next_page.has_more), (3, False))
+
+        filtered = await PdfInvoiceService.list_invoices(
+            1, 25, "Example", date(2026, 9, 24), date(2026, 9, 25)
+        )
+        self.assertEqual([row.id for row in filtered.items], [second.id, first.id])
+        self.assertEqual((filtered.total, filtered.has_more), (2, False))
 
     async def test_sale_number_skips_pending_and_ready_pdf_reservations(self):
         self.upload.side_effect = OSError("cloud unavailable")

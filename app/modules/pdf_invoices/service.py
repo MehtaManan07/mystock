@@ -138,7 +138,7 @@ class PdfInvoiceService:
                 query = query.where(PdfInvoice.invoice_date <= to_date)
             total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
             rows = db.scalars(query.order_by(
-                PdfInvoice.invoice_date.desc(), PdfInvoice.id.desc()
+                PdfInvoice.created_at.desc(), PdfInvoice.id.desc()
             ).offset((page - 1) * page_size).limit(page_size)).all()
             return PdfInvoicePage(
                 items=[PdfInvoiceResponse.model_validate(row) for row in rows],

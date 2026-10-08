@@ -13,13 +13,15 @@ from reportlab.pdfbase.ttfonts import TTFont
 import os
 from decimal import Decimal
 from io import BytesIO
+from xml.sax.saxutils import escape
 
 
 from app.modules.transactions.models import Transaction, ProductDetailsDisplayMode, TaxType
 from app.modules.settings.models import CompanySettings
+from app.modules.settings.schemas import CompanyBankDetails
 from app.modules.vendor_product_skus.models import VendorProductSku
 from app.modules.products.models import Product
-from app.core.utils import calculate_due_date, amount_to_words, format_invoice_date
+from app.core.utils import amount_to_words, format_invoice_date
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 
@@ -52,7 +54,9 @@ class InvoiceGenerator:
     def generate_invoice_pdf(
         transaction: Transaction,
         company_settings: CompanySettings,
-        db: Session
+        db: Session,
+        *,
+        show_invoice_number: bool = True,
     ) -> bytes:
         """
         Generate a professional GST invoice PDF from transaction data.
@@ -61,6 +65,7 @@ class InvoiceGenerator:
             transaction: Transaction model with items, contact, etc.
             company_settings: Company settings with seller information
             db: Database session for vendor SKU lookups
+            show_invoice_number: Print the invoice number; enabled for normal invoices.
             
         Returns:
             bytes: PDF file contents
@@ -294,14 +299,10 @@ class InvoiceGenerator:
                 c.setFont("DejaVuSans", 9)
                 invoice_no = transaction.transaction_number
                 invoice_date = format_invoice_date(transaction.transaction_date)
-                due_date_obj = calculate_due_date(transaction.transaction_date)
-                due_date = format_invoice_date(due_date_obj)
 
-                c.drawString(right_margin - 250, invoice_y, f"Invoice No.: {invoice_no}")
+                if show_invoice_number:
+                    c.drawString(right_margin - 250, invoice_y, f"Invoice No.: {invoice_no}")
                 c.drawRightString(right_margin, invoice_y, f"Dated: {invoice_date}")
-                invoice_y -= 15
-
-                c.drawString(right_margin - 250, invoice_y, f"Due Date: {due_date}")
 
                 y -= 12
             
@@ -466,11 +467,40 @@ class InvoiceGenerator:
                 terms_lines.extend(wrap_text(term.strip(), left_width, "DejaVuSans", 8))
         left_col_height = 15 + len(words_lines) * 13 + 8 + 14 + len(terms_lines) * 12
 
+        bank = CompanyBankDetails.model_validate(company_settings, from_attributes=True)
+        bank_table = None
+        bank_height = 0
+        if bank.bank_name:
+            assert bank.bank_account_number and bank.bank_ifsc
+            bank_rows = [
+                [Paragraph("Company's Bank Details", sku_cell_bold_style), ""],
+                ["Bank Name", Paragraph(escape(bank.bank_name), sku_cell_style)],
+                ["A/c No.", Paragraph(escape(bank.bank_account_number), sku_cell_style)],
+            ]
+            if bank.bank_branch:
+                bank_rows.append(["Branch / Code", Paragraph(escape(bank.bank_branch), sku_cell_style)])
+            bank_rows.append(["IFSC", Paragraph(escape(bank.bank_ifsc), sku_cell_style)])
+            bank_table = Table(bank_rows, colWidths=[110, right_margin - left_margin - 110])
+            bank_table.setStyle(TableStyle([
+                ('SPAN', (0, 0), (-1, 0)),
+                ('FONTNAME', (0, 0), (-1, -1), 'DejaVuSans'),
+                ('FONTSIZE', (0, 0), (-1, -1), 8),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+                ('TOPPADDING', (0, 0), (-1, -1), 3),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+                ('BOX', (0, 0), (-1, -1), 0.5, colors.black),
+            ]))
+            _, bank_height = bank_table.wrapOn(c, width, height)
+
         # Signature block below the two columns: gap + "Certified" + "For <company>"
         # + "Authorised Signatory", which must stay clear of the page edge.
         signature_height = 22 + 26 + 34
         page_bottom_clear = 25
         footer_height = max(box_height + 12, left_col_height) + signature_height
+        if bank_table is not None:
+            footer_height += 12 + bank_height
 
         # ---------- ITEMS TABLE (paged by measurement) ----------
         def build_items_table(start, end, with_total_row):
@@ -634,8 +664,13 @@ class InvoiceGenerator:
             c.drawString(left_margin, left_y, line)
             left_y -= 12
 
+        y = min(left_y, summary_bottom)
+        if bank_table is not None:
+            y -= 12 + bank_height
+            bank_table.drawOn(c, left_margin, y)
+
         # ---------- FOOTER ----------
-        y = min(left_y, summary_bottom) - 22
+        y -= 22
 
         # The signature block below needs 60pt and must keep ~25pt clear of the
         # page edge; overflow to a fresh page rather than running off it.

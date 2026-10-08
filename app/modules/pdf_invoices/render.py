@@ -15,6 +15,7 @@ class GeneratePdfInvoice(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     invoice_number: str
+    show_invoice_number: bool = Field(default=True, strict=True)
     invoice_date: date
     customer_name: str
     customer_gstin: str | None = None
@@ -50,7 +51,7 @@ def render_invoice(spec: GeneratePdfInvoice, seller: SimpleNamespace) -> tuple[P
     if target is None:
         target = (subtotal + tax).to_integral_value(rounding=ROUND_CEILING)
     metadata = PdfInvoiceMetadata(
-        **spec.model_dump(exclude={"tax_type", "total_amount"}),
+        **spec.model_dump(exclude={"tax_type", "total_amount", "show_invoice_number"}),
         subtotal=subtotal, cgst=cgst, sgst=sgst,
         igst=tax if spec.tax_type == "igst" else Decimal("0.00"),
         round_off=target - subtotal - tax, total_amount=target, source="generated",
@@ -67,4 +68,6 @@ def render_invoice(spec: GeneratePdfInvoice, seller: SimpleNamespace) -> tuple[P
         items=items, subtotal=subtotal, tax_amount=tax,
         total_amount=target, discount_amount=Decimal("0.00"),
     )
-    return metadata, InvoiceGenerator.generate_invoice_pdf(transaction, seller, None)
+    return metadata, InvoiceGenerator.generate_invoice_pdf(
+        transaction, seller, None, show_invoice_number=spec.show_invoice_number,
+    )
