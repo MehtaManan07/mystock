@@ -71,6 +71,8 @@ class PdfInvoiceService:
         )
         db.add(row)
         db.flush()
+        from app.modules.gst_reports.sources import capture_source
+        capture_source(db, "pdf_invoice", row.id)
         return row
 
     @staticmethod

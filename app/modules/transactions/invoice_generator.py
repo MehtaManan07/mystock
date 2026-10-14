@@ -282,9 +282,9 @@ class InvoiceGenerator:
                 c.drawString(left_margin, y, f"GSTIN/UIN: {customer_gstin}")
                 y -= 13
 
-                # Extract and display buyer state information
-                buyer_state_name, buyer_state_code = extract_state_from_gstin(customer_gstin if customer_gstin != "-" else "")
-                c.drawString(left_margin, y, f"State Name: {buyer_state_name}, Code: {buyer_state_code}")
+                if customer_gstin != "-":
+                    buyer_state_name, buyer_state_code = extract_state_from_gstin(customer_gstin)
+                    c.drawString(left_margin, y, f"State Name: {buyer_state_name}, Code: {buyer_state_code}")
                 y -= 13
 
                 # Handle None phone

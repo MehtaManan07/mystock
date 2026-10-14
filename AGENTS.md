@@ -13,3 +13,11 @@
 - Standalone bills do not create transactions, change stock or affect balances.
 - Never run tests, apply live migrations, import historical bills, commit or deploy
   without the user's approval. Leave implementation changes for local review.
+
+# GST reporting
+
+- Read `docs/gst-reporting.md` before changing GST reviews or exporting a return.
+- Keep reporting separate from accounting. Do not invent HSN, UQC, place of supply,
+  exemptions, cancellations or supplier credit notes to remove export blockers.
+- Migration `0016_gst_reporting` must precede deployment of automatic snapshots.
+- Excel output requires official offline-tool/portal validation; it is not a filed return.

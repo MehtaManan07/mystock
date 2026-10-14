@@ -573,6 +573,10 @@ class TransactionsService:
         transaction.contact = contact
         transaction.payments = [payment] if payment else []
 
+        if is_sale:
+            from app.modules.gst_reports.sources import capture_source
+            capture_source(db, "transaction", transaction.id)
+
         return transaction
 
     @staticmethod

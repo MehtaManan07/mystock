@@ -82,11 +82,12 @@ class BankSettingsTests(unittest.TestCase):
 
 
 class BankLayoutTests(unittest.TestCase):
-    def render(self, bank, count=1, show_invoice_number=True):
+    def render(self, bank, count=1, show_invoice_number=True,
+               customer_gstin="24AAFCE7955A1ZT", customer_address=None):
         spec = GeneratePdfInvoice(
             invoice_number="TEST-1", invoice_date="2026-10-06", customer_name="Example Buyer",
             show_invoice_number=show_invoice_number,
-            customer_gstin="24AAFCE7955A1ZT", tax_type="cgst_sgst",
+            customer_gstin=customer_gstin, customer_address=customer_address, tax_type="cgst_sgst",
             line_items=[dict(name=f"Product {i}", quantity=1, unit_price="100", tax_rate="18") for i in range(count)],
         )
         canvases, bank_positions, bank_text = [], [], []
@@ -155,6 +156,23 @@ class BankLayoutTests(unittest.TestCase):
         self.assertEqual(page, pages)
         self.assertGreaterEqual(y, 107)
         self.assertLessEqual(y + height, page_height - 40)
+
+    def test_unregistered_buyer_omits_unknown_state_without_changing_registered_headers(self):
+        _, content, _, _, _ = self.render(
+            BANK, customer_gstin=None,
+            customer_address="Visakhapatnam - 530001, Andhra Pradesh, State Code: 37",
+        )
+        self.assertIn(b"GSTIN/UIN: -", content)
+        self.assertIn(b"Andhra Pradesh, State Code: 37", content)
+        self.assertNotIn(b"State Name: Not Specified", content)
+        self.assertNotIn(b"Code: 00", content)
+        self.assertEqual(content.count(b"State Name: Gujarat, Code: 24"), 1)
+        self.assertIn(b"Invoice No.: TEST-1", content)
+        self.assertIn(b"Dated: 06-Oct-2026", content)
+
+        _, registered, _, _, _ = self.render(BANK)
+        self.assertIn(b"GSTIN/UIN: 24AAFCE7955A1ZT", registered)
+        self.assertEqual(registered.count(b"State Name: Gujarat, Code: 24"), 2)
 
 
 if __name__ == "__main__":
