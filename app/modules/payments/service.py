@@ -20,7 +20,7 @@ from .schemas import CreateManualPaymentDto, UpdateManualPaymentDto, FilterManua
 class PaymentsService:
     """
     Payments service with optimized database queries.
-    All methods use run_db() for thread-safe Turso operations.
+    All methods use run_db() for thread-safe database operations.
     Handles manual payments (not linked to transactions).
     """
 

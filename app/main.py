@@ -41,10 +41,11 @@ async def lifespan(app: FastAPI):
     """
     Application lifespan manager.
     """
-    from app.core.db.engine import check_database_connection
+    from app.core.db.engine import check_database_connection, engine
     
     logger.info("Starting MyStock API...")
-    logger.info(f"Connecting to Turso database: {config.turso_database_url}")
+    # Read from the live engine so this can never disagree with the real target.
+    logger.info(f"Connecting to database: {engine.url.render_as_string(hide_password=True)}")
     
     # Verify database connection on startup
     if await check_database_connection():
@@ -60,7 +61,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="MyStock API",
-    description="Inventory management system with Turso (libSQL) backend",
+    description="Inventory management system with PostgreSQL backend",
     version="1.0.0",
     lifespan=lifespan,
 )

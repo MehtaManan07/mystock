@@ -23,6 +23,11 @@ from .schemas import PdfInvoiceMetadata, PdfInvoicePage, PdfInvoiceResponse, fin
 logger = logging.getLogger(__name__)
 MAX_PDF_BYTES = 10 * 1024 * 1024
 
+# Postgres reports the violated constraint by name. Either unique on
+# pdf_invoices means a concurrent insert won the race, so the retry re-reads
+# and reuses the winner's row.
+_UNIQUE_CONSTRAINTS = ("uq_pdf_invoice_sha256", "uq_pdf_invoice_number_year")
+
 
 def validate_pdf(content: bytes) -> None:
     if not content or len(content) > MAX_PDF_BYTES:
@@ -86,8 +91,8 @@ class PdfInvoiceService:
 
         try:
             row = await run_db(reserve)
-        except (IntegrityError, ValueError) as exc:
-            if "unique constraint failed: pdf_invoices." not in str(exc).lower():
+        except IntegrityError as exc:
+            if not any(name in str(exc) for name in _UNIQUE_CONSTRAINTS):
                 raise
             # A concurrent identical upload may have won the unique-key race.
             row = await run_db(reserve)

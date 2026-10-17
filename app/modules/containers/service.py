@@ -27,7 +27,7 @@ def extract_number_from_name(name: str) -> int:
 class ContainerService:
     """
     Container service with optimized database queries.
-    All methods use run_db() for thread-safe Turso operations.
+    All methods use run_db() for thread-safe database operations.
     """
 
     # Virtual container name for products not in any physical container

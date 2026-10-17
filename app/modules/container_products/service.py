@@ -25,7 +25,7 @@ class ContainerProductService:
     """
     ContainerProduct service with complex transaction logic.
     Handles inventory management with pessimistic locking and audit logging.
-    All methods use run_db() for thread-safe Turso operations.
+    All methods use run_db() for thread-safe database operations.
     """
 
     @staticmethod

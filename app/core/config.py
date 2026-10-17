@@ -3,15 +3,8 @@ from pydantic import Field
 
 
 class Config(BaseSettings):
-    # Turso Configuration (libSQL cloud database) - REQUIRED
-    turso_database_url: str = Field(alias="TURSO_DATABASE_URL")
-    turso_auth_token: str = Field(alias="TURSO_AUTH_TOKEN")
-
-    # Database backend selection: "turso" (default) or "postgres".
-    # Defaults to Turso so behaviour is unchanged until the cutover is made
-    # explicitly by setting DB_BACKEND=postgres. Rollback is reverting this var.
-    db_backend: str = Field(default="turso", alias="DB_BACKEND")
-    postgres_url: str = Field(default="", alias="POSTGRES_URL")
+    # PostgreSQL connection string - REQUIRED
+    postgres_url: str = Field(alias="POSTGRES_URL")
 
     # JWT Configuration
     jwt_secret: str = Field(default="", alias="JWT_SECRET")

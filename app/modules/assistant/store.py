@@ -21,7 +21,7 @@ here is capped. The cap that matters is `MAX_EVENTS_PER_RUN`: an agent stuck in
 a tool-calling loop is the most likely way to take the server down.
 
 This is deliberately shaped like its replacement. Step 9 swaps the backing store
-for Turso without changing a single caller.
+for Postgres without changing a single caller.
 """
 
 import asyncio

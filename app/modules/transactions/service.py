@@ -45,7 +45,7 @@ class TransactionsService:
     """
     Transactions service for managing sales and purchases.
     Handles complex business logic with proper locking and audit trails.
-    All methods use run_db() for thread-safe Turso operations.
+    All methods use run_db() for thread-safe database operations.
     """
 
     # --- Internal sync helper methods (called within run_db context) ---

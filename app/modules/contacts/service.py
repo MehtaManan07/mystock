@@ -18,7 +18,7 @@ from app.modules.contacts.schemas import CreateContactDto, UpdateContactDto, Fil
 class ContactsService:
     """
     Contacts service with optimized database queries.
-    All methods use run_db() for thread-safe Turso operations.
+    All methods use run_db() for thread-safe database operations.
     """
 
     @staticmethod

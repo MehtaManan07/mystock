@@ -45,7 +45,6 @@ ipython_pygments_lexers==1.1.1
 jedi==0.19.2
 jmespath==1.0.1
 kombu==5.5.4
-libsql-experimental==0.0.55
 Mako==1.3.10
 MarkupSafe==3.0.2
 matplotlib-inline==0.1.7
@@ -86,7 +85,6 @@ rsa==4.9.1
 six==1.17.0
 sniffio==1.3.1
 SQLAlchemy==2.0.43
-sqlalchemy-libsql==0.2.0
 stack-data==0.6.3
 starlette==0.47.3
 tinycss2==1.4.0

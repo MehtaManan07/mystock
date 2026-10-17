@@ -27,7 +27,7 @@ from app.modules.payments.models import Payment
 class DashboardService:
     """
     Dashboard service for aggregating all dashboard data efficiently.
-    All methods use run_db() for thread-safe Turso operations.
+    All methods use run_db() for thread-safe database operations.
     """
 
     @staticmethod

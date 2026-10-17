@@ -18,7 +18,7 @@ from app.modules.container_products.models import ContainerProduct
 class DraftsService:
     """
     Drafts service for managing transaction drafts.
-    All methods use run_db() for thread-safe Turso operations.
+    All methods use run_db() for thread-safe database operations.
     """
 
     @staticmethod

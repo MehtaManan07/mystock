@@ -48,7 +48,7 @@ Authenticated endpoints (under `/api`):
 | `GET /pdf-invoices/{id}/file` | Checksum-verified PDF, proxied through the API |
 | `POST /pdf-invoices` | Multipart `metadata` (JSON string) and `file` (original PDF) |
 
-Metadata is stored in Turso `pdf_invoices`. Objects are stored in the existing
+Metadata is stored in Postgres `pdf_invoices`. Objects are stored in the existing
 bucket at `<GCP_INVOICE_PREFIX>/standalone/<financial-year>/<sha256>.pdf`.
 The usual prefix is `invoices/`. No bucket ACL changes are made: **authenticated
 app downloads do not make an already-public bucket private**.

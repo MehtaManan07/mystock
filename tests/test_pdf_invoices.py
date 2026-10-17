@@ -15,11 +15,11 @@ from fastapi.testclient import TestClient
 from google.api_core.exceptions import PreconditionFailed
 from pydantic import ValidationError as SchemaError
 from sqlalchemy import create_engine, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 with patch.dict(os.environ, {
-    "TURSO_DATABASE_URL": "libsql://unit-test.invalid",
-    "TURSO_AUTH_TOKEN": "not-a-real-token",
+    "POSTGRES_URL": "postgresql+psycopg://unit:test@localhost:5432/unit-test-invalid",
     "GCP_BUCKET_NAME": "unit-tests",
     "SECRET_KEY": "unit-test-only",
 }):
@@ -221,20 +221,23 @@ class RegisterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.upload_status, "ready")
         self.assertEqual(self.upload.call_args_list[0], self.upload.call_args_list[1])
 
-    async def test_turso_unique_race_retries_but_unrelated_value_error_propagates(self):
+    async def test_unique_race_retries_but_unrelated_integrity_error_propagates(self):
         existing = await self.register()
-        for message, expected_retry in [
-            ("Hrana: UNIQUE constraint failed: pdf_invoices.pdf_sha256", True),
-            ("database value conversion failed", False),
+        for constraint, expected_retry in [
+            ("uq_pdf_invoice_sha256", True),
+            ("uq_pdf_invoice_number_year", True),
+            ("some_other_check", False),
         ]:
-            with self.subTest(message=message):
+            with self.subTest(constraint=constraint):
+                message = f'duplicate key value violates unique constraint "{constraint}"'
+                error = IntegrityError("INSERT INTO pdf_invoices", {}, Exception(message))
                 with patch("app.modules.pdf_invoices.service.run_db",
-                           side_effect=[ValueError(message), existing]) as execute:
+                           side_effect=[error, existing]) as execute:
                     if expected_retry:
                         self.assertEqual((await self.register()).id, existing.id)
                         self.assertEqual(execute.await_count, 2)
                     else:
-                        with self.assertRaisesRegex(ValueError, "conversion"):
+                        with self.assertRaises(IntegrityError):
                             await self.register()
                         self.assertEqual(execute.await_count, 1)
 

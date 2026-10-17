@@ -25,7 +25,7 @@ from .schemas import (
 class UsersService:
     """
     Users service with optimized database queries.
-    All methods use run_db() for thread-safe Turso operations.
+    All methods use run_db() for thread-safe database operations.
     """
 
     @staticmethod

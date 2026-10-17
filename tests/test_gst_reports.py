@@ -14,8 +14,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 with patch.dict(os.environ, {
-    "TURSO_DATABASE_URL": "libsql://unit-test.invalid",
-    "TURSO_AUTH_TOKEN": "not-a-real-token",
+    "POSTGRES_URL": "postgresql+psycopg://unit:test@localhost:5432/unit-test-invalid",
     "GCP_BUCKET_NAME": "unit-tests",
     "SECRET_KEY": "unit-test-only",
 }):
