@@ -1,7 +1,8 @@
 """
-Alembic environment configuration for Turso (libSQL).
+Alembic environment configuration.
 
-Uses synchronous engine for Turso via sqlalchemy-libsql.
+Targets either Turso (libSQL) or PostgreSQL, selected by the DB_BACKEND
+env var and defaulting to Turso.
 """
 
 import os
@@ -32,17 +33,37 @@ load_dotenv()
 config = context.config
 
 # -------------------------------
-# TURSO DATABASE CONFIGURATION
+# DATABASE CONFIGURATION
 # -------------------------------
-TURSO_DATABASE_URL = os.getenv("TURSO_DATABASE_URL")
-TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN")
+# Backend is selected by DB_BACKEND, defaulting to Turso so existing
+# workflows are unchanged. Postgres is opt-in.
+DB_BACKEND = (os.getenv("DB_BACKEND") or "turso").strip().lower()
 
-if not TURSO_DATABASE_URL or not TURSO_AUTH_TOKEN:
-    raise ValueError("TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must be set in .env")
+connect_args: dict = {}
 
-# Build SQLAlchemy URL for libSQL
-db_url = TURSO_DATABASE_URL.replace("libsql://", "sqlite+libsql://") + "?secure=true"
+if DB_BACKEND == "postgres":
+    db_url = os.getenv("POSTGRES_URL")
+    if not db_url:
+        raise ValueError("DB_BACKEND=postgres but POSTGRES_URL is not set in .env")
+elif DB_BACKEND == "turso":
+    TURSO_DATABASE_URL = os.getenv("TURSO_DATABASE_URL")
+    TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN")
+
+    if not TURSO_DATABASE_URL or not TURSO_AUTH_TOKEN:
+        raise ValueError("TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must be set in .env")
+
+    # Build SQLAlchemy URL for libSQL
+    db_url = TURSO_DATABASE_URL.replace("libsql://", "sqlite+libsql://") + "?secure=true"
+    connect_args = {"auth_token": TURSO_AUTH_TOKEN}
+else:
+    raise ValueError(f"Unknown DB_BACKEND {DB_BACKEND!r}; expected 'turso' or 'postgres'")
+
 config.set_main_option("sqlalchemy.url", db_url)
+
+# Batch mode rewrites ALTER TABLE as copy-and-swap. It is required for SQLite,
+# which cannot ALTER columns, but on Postgres it produces needless table
+# rewrites and must stay off.
+RENDER_AS_BATCH = DB_BACKEND == "turso"
 
 # Logging
 if config.config_file_name is not None:
@@ -64,7 +85,7 @@ def run_migrations_offline() -> None:
         dialect_opts={"paramstyle": "named"},
         compare_type=True,
         compare_server_default=True,
-        render_as_batch=True,  # Required for SQLite-based databases
+        render_as_batch=RENDER_AS_BATCH,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -80,7 +101,7 @@ def do_run_migrations(connection: Connection) -> None:
         target_metadata=target_metadata,
         compare_type=True,
         compare_server_default=True,
-        render_as_batch=True,  # Required for SQLite-based databases
+        render_as_batch=RENDER_AS_BATCH,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -90,7 +111,7 @@ def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
     connectable = create_engine(
         db_url,
-        connect_args={"auth_token": TURSO_AUTH_TOKEN},
+        connect_args=connect_args,
         pool_pre_ping=True,
     )
 

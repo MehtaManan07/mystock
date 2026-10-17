@@ -72,18 +72,38 @@ def review_response(row):
     }
 
 
+_REVISION_CONFLICT_MARKERS = (
+    # Postgres names the violated constraint.
+    "uq_gst_review_revision",
+    # SQLite/libSQL names the columns instead.
+    "gst_reviews.source_key, gst_reviews.revision",
+)
+
+_REVISION_CONFLICT_MESSAGE = (
+    "A concurrent GST review won the revision; reload before retrying."
+)
+
+
+def _is_revision_conflict(exc: BaseException) -> bool:
+    """True if `exc` is the (source_key, revision) unique violation, on any backend."""
+    message = str(exc)
+    return any(marker in message for marker in _REVISION_CONFLICT_MARKERS)
+
+
 async def guarded_write(operation):
     try:
         return await run_db(operation)
     except IntegrityError as exc:
-        if "gst_reviews.source_key, gst_reviews.revision" not in str(exc):
+        if not _is_revision_conflict(exc):
             raise
-        raise ConflictError("A concurrent GST review won the revision; reload before retrying.") from exc
+        raise ConflictError(_REVISION_CONFLICT_MESSAGE) from exc
     except ValueError as exc:
         # libSQL sometimes wraps SQLite UNIQUE violations as ValueError.
-        if "UNIQUE constraint failed: gst_reviews.source_key, gst_reviews.revision" not in str(exc):
+        # Retained while Turso remains the rollback target (checklist 6.7);
+        # safe to drop once Turso is decommissioned in Phase 7.
+        if not _is_revision_conflict(exc):
             raise
-        raise ConflictError("A concurrent GST review won the revision; reload before retrying.") from exc
+        raise ConflictError(_REVISION_CONFLICT_MESSAGE) from exc
 
 
 class GstReportingService:

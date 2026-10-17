@@ -58,6 +58,7 @@ pip-tools==7.5.2
 prompt_toolkit==3.0.52
 proto-plus==1.27.1
 protobuf==6.33.5
+psycopg[binary]==3.3.6
 ptyprocess==0.7.0
 pure_eval==0.2.3
 pyasn1==0.6.1

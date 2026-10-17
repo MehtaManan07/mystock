@@ -38,9 +38,17 @@ def _now() -> datetime:
 
 
 class BaseEvent(BaseModel):
-    """Envelope fields present on every streamed event."""
+    """
+    Envelope fields present on every streamed event.
 
-    seq: int = Field(..., ge=1, description="Monotonic sequence number within the run, starting at 1")
+    Agents construct events *without* a `seq`: sequence numbering belongs to the
+    run, not to the thing producing events. `RunRegistry` stamps the real value
+    on emit, and `format_sse` refuses to put an unstamped event on the wire.
+    """
+
+    seq: int = Field(
+        0, ge=0, description="Monotonic sequence within the run, from 1. 0 means not yet stamped"
+    )
     ts: datetime = Field(default_factory=_now, description="Server emit time, UTC")
 
 
@@ -161,7 +169,12 @@ def is_terminal(event: BaseEvent) -> bool:
 
 
 def format_sse(event: BaseEvent) -> str:
-    """Render one event as an SSE frame."""
+    """Render one event as an SSE frame. Rejects events the registry never stamped."""
+    if event.seq < 1:
+        raise ValueError(
+            f"refusing to send an unstamped {getattr(event, 'type', '?')} event; "
+            "seq is assigned by RunRegistry on emit"
+        )
     payload = event.model_dump_json(exclude_none=True)
     return f"id: {event.seq}\ndata: {payload}\n\n"
 

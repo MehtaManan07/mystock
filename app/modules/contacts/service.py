@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 from app.core.db.engine import run_db
 from app.core.exceptions import NotFoundError, ValidationError
 from app.core.pagination import paginate_query, build_paginated_response
-from .models import Contact, ContactType
-from .schemas import CreateContactDto, UpdateContactDto, FilterContactsDto
+from app.modules.contacts.models import Contact, ContactType
+from app.modules.contacts.schemas import CreateContactDto, UpdateContactDto, FilterContactsDto
 
 
 class ContactsService:
