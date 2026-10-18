@@ -25,6 +25,11 @@ from app.modules.drafts.models import Draft
 from app.modules.pdf_invoices.models import PdfInvoice
 from app.modules.settings.models import CompanySettings
 from app.modules.gst_reports.models import GstReview
+from app.modules.assistant.models import (
+    AssistantThread,
+    AssistantMessage,
+    AssistantRun,
+)
 
 # Load .env
 load_dotenv()

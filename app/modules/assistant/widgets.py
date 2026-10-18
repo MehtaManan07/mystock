@@ -47,5 +47,6 @@ class ConfirmActionWidget(BaseModel):
 
 
 # Becomes Annotated[Union[...], Field(discriminator="type")] if a second widget
-# is ever justified. Until then a single model keeps the client's switch honest.
+# is ever justified. The `type` field is already on the wire, so adding one is
+# additive: an old client meets an unknown widget, not a changed shape.
 Widget = ConfirmActionWidget

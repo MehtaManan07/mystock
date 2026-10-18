@@ -23,6 +23,7 @@ from app.modules.dashboard import router as dashboard_router
 from app.modules.drafts import router as drafts_router
 from app.modules.pdf_invoices.router import router as pdf_invoices_router
 from app.modules.gst_reports.router import router as gst_reports_router
+from app.modules.assistant import router as assistant_router
 
 # Configure logging to output to console
 logging.basicConfig(
@@ -50,6 +51,17 @@ async def lifespan(app: FastAPI):
     # Verify database connection on startup
     if await check_database_connection():
         logger.info("Database connection verified successfully")
+
+        # A run's queues and task live in this process, so anything still
+        # marked `running` was orphaned when the last one died. Left alone it
+        # would block its thread forever, because only one run per thread may
+        # be active.
+        try:
+            from app.modules.assistant.services import RunService
+
+            await RunService.reconcile_stale_runs()
+        except Exception:
+            logger.exception("Could not reconcile interrupted assistant runs")
     else:
         logger.error("Failed to connect to database!")
     
@@ -108,6 +120,7 @@ app.include_router(dashboard_router, prefix="/api")
 app.include_router(drafts_router, prefix="/api")
 app.include_router(pdf_invoices_router, prefix="/api")
 app.include_router(gst_reports_router, prefix="/api")
+app.include_router(assistant_router, prefix="/api")
 
 
 @app.get("/demo")
