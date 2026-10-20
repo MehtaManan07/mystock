@@ -17,6 +17,7 @@ class GeneratePdfInvoice(BaseModel):
     invoice_number: str
     show_invoice_number: bool = Field(default=True, strict=True)
     invoice_date: date
+    customer_id: int | None = Field(default=None, gt=0, strict=True)
     customer_name: str
     customer_gstin: str | None = None
     customer_address: str | None = None

@@ -3,8 +3,8 @@ Contact DTOs (Data Transfer Objects) - equivalent to NestJS DTOs
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional, List
-from datetime import datetime
+from typing import Optional, List, Literal
+from datetime import date, datetime
 from decimal import Decimal
 from .models import ContactType
 
@@ -61,3 +61,22 @@ class ContactResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class ContactBill(BaseModel):
+    source: Literal["transaction", "pdf_invoice"]
+    id: int
+    number: str
+    date: date
+    total_amount: Decimal
+    transaction_type: Literal["sale", "purchase"] | None
+    payment_status: Literal["paid", "partial", "unpaid"] | None
+    upload_status: Literal["pending", "ready"] | None
+
+
+class ContactBillPage(BaseModel):
+    items: list[ContactBill]
+    total: int
+    page: int
+    page_size: int
+    has_more: bool

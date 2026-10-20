@@ -86,8 +86,12 @@ def register_pdf(metadata: PdfInvoiceMetadata, path: Path) -> dict:
     record = PdfInvoiceResponse.model_validate(payload.get("data", payload)).model_dump(mode="json")
     if record.get("upload_status") != "ready" or record.get("pdf_sha256") != hashlib.sha256(content).hexdigest():
         raise RuntimeError("Server did not confirm a matching archived PDF; check the register before retrying")
-    expected = metadata.model_dump(mode="json")
+    expected = metadata.model_dump(
+        mode="json", exclude={"customer_id"} if metadata.customer_id is None else set()
+    )
     actual = PdfInvoiceMetadata.model_validate({key: record[key] for key in expected}).model_dump(mode="json")
+    if metadata.customer_id is None:
+        actual.pop("customer_id")
     if actual != expected:
         raise RuntimeError("Server returned different invoice details; registration was not confirmed")
     stored = requests.get(
@@ -110,6 +114,8 @@ def generate(spec: GeneratePdfInvoice, output: Path, preview: bool = False) -> N
     if output.exists() or metadata_path.exists():
         raise FileExistsError("Output or metadata already exists. Retry import rather than overwriting an invoice")
     if not preview:
+        if spec.customer_id is None:
+            raise ValueError("Supply the existing customer's customer_id before generating a final invoice")
         api_config()
     metadata, content = render_invoice(spec, load_seller())
     # Keep a durable sidecar and the exact bytes even if the upload fails.

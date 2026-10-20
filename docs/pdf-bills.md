@@ -9,8 +9,13 @@ customer balances or payments. Regular transaction PDFs remain in Transactions.
 The existing PDF Bills backend/frontend and migration
 `0014_pdf_invoice_register` are live. Historical imports have been performed with
 approval. Do not perform additional imports, commits or deployment without approval.
-The newer company-bank-details code and date-added list ordering described below
-are **not yet deployed**.
+The customer-link changes below require migration `0018_pdf_invoice_customer`
+before the revised backend, CLI and frontend are used. Deployment still requires
+separate approval.
+On 20-Oct-2026, that migration was applied with approval: all 29 existing PDF
+records (25 active, 4 retired) were linked to the 9 saved customers. Invoice
+snapshots, archive references and accounting data were unchanged. The revised
+backend/frontend code remains local and undeployed.
 
 For another environment, after approval, back up the database and apply migration
 `0014_pdf_invoice_register` (parent: `0013_per_item_gst`), then deploy backend and
@@ -29,8 +34,10 @@ All authenticated roles can search/filter the register and view/download PDFs.
 The list sorts by date added (`created_at`), newest first, with descending record
 ID breaking timestamp ties across pages. Printed invoice dates do not affect
 this order; the From/To date filters still apply to the printed invoice date.
-ADMIN and STAFF can upload an issued PDF (maximum 10 MiB) and enter the printed
-invoice details. Copy amounts exactly: taxable + CGST + SGST + IGST + round-off
+ADMIN and STAFF can select a saved customer, upload an issued PDF (maximum 10 MiB)
+and enter the printed invoice details. New registrations require `customer_id`;
+create missing customers in Contacts first. Copy amounts exactly:
+taxable + CGST + SGST + IGST + round-off
 must equal the final total. IGST cannot be combined with CGST/SGST. Round-off must
 be less than one rupee in either direction.
 
@@ -59,6 +66,44 @@ Different content or details under the same identity returns 409. Numbers and
 matching original PDF checksums already in Transactions are rejected, including
 soft-deleted transactions, to avoid unintentional duplicate accounting.
 
+## Contact bill history
+
+The contact detail page's **Bills** list combines sales, purchases and standalone
+PDF invoices through authenticated `GET /contacts/{contact_id}/bills` (`page`,
+`page_size`, maximum 100). Pagination applies to the combined history, newest
+invoice date first, then creation time, source and ID for stable ties.
+
+PDFs are retrieved by the indexed `pdf_invoices.customer_id` foreign key to
+`contacts.id`, not by names or GSTINs at read time. Renaming a customer or changing
+their GSTIN does not move or hide historical bills. The invoice's printed customer
+name, GSTIN, address and phone remain immutable snapshots, separate from this link.
+
+Migration `0018_pdf_invoice_customer` adds the link and backfills existing records,
+including retired PDFs. It uses a unique active contact with the same normalized
+GSTIN, or a unique exact normalized name only when both sides lack GSTINs.
+Ambiguous or unmatched records remain null for explicit administrative resolution;
+inspect every unresolved row before considering a backfill complete. Never use
+fuzzy matching or create contacts as a migration side effect.
+
+The column remains nullable for historical exceptions and compatibility with the
+old deployed writer during rollout. The revised API requires an explicit, active
+customer (or both-type contact) for every new registration. It rejects conflicting
+GSTINs when both the invoice and contact have one. Old sidecars without
+`customer_id` can still retry an existing invoice without changing its link.
+An explicit different ID on a replay is rejected. The link is excluded from the
+printed-metadata checksum, preserving historical hashes and exact-byte retries.
+
+Deleted records are excluded. Pending PDF uploads remain visible as incomplete
+and link to the PDF register; ready PDFs use the existing authenticated preview
+and download. PDF bills never acquire a paid/unpaid status or contribute to the
+contact balance. This is a combined view, not a merge of accounting records.
+After approval, back up the affected data, apply `0018_pdf_invoice_customer` and
+verify the links and unchanged financial/archive fields. Deploy the backend before
+the updated frontend. Avoid new PDF registrations through the old writer between
+the backfill and deployment: it can still create null links. Reconcile any such
+rows explicitly before rollout is complete. Deployment and tests still require
+explicit approval.
+
 ## Generate future final invoices
 
 Run from `mystock` using its venv:
@@ -75,6 +120,7 @@ Example input (replace with confirmed customer, tax and product details):
 {
   "invoice_number": "39",
   "invoice_date": "2026-09-24",
+  "customer_id": 123,
   "customer_name": "Example Buyer",
   "customer_gstin": null,
   "customer_address": null,
@@ -94,7 +140,9 @@ Example input (replace with confirmed customer, tax and product details):
 }
 ```
 
-The CLI reads active seller settings from the backend's configured database
+Replace `customer_id` with the actual saved customer's ID; it is not printed.
+Final generation requires it before rendering, while an unissued `--preview`
+may omit it. The CLI reads active seller settings from the backend's configured database
 (read-only); they must match the selected API/company. It reuses the standard
 invoice renderer, stores line-item snapshots, and uploads through the API.
 It does not guess applicable GST/HSN or adjust quantities. `total_amount` may be

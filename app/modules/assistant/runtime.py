@@ -97,6 +97,19 @@ class LiveRun:
     events: List[AgentEvent] = field(default_factory=list)
     subscribers: Set["asyncio.Queue"] = field(default_factory=set)
 
+    # The *current* ephemeral state, retained so a client that attaches
+    # mid-run is told what the agent is doing right now. This is a snapshot,
+    # not a history: only the latest status is kept, and it is still never
+    # persisted. The agent emits "thinking" and starts a slow context read
+    # *before* the browser -- which only subscribes after the send POST
+    # returns -- has opened the stream, so without this the very first
+    # subscriber would miss every status line the run already produced.
+    current_status: Optional[AgentEvent] = None
+    # tool_call_id -> (start_event, end_event or None), in call order.
+    live_tool_calls: "OrderedDict[str, Tuple[AgentEvent, Optional[AgentEvent]]]" = (
+        field(default_factory=OrderedDict)
+    )
+
     cancelled: bool = False
     finished: bool = False
 
@@ -148,6 +161,13 @@ class RunRegistry:
         Backlog and registration happen under one lock. Taking a snapshot and
         then subscribing would drop any event emitted in between, and the
         reverse order would deliver it twice.
+
+        The backlog carries durable events plus the current ephemeral snapshot
+        (the live status line and any in-flight tool chips), so a client that
+        attaches mid-run sees what the agent is doing, not a blank pane. The
+        snapshot is still filtered by ``after_seq``: a reconnecting client that
+        already saw a status past its resume point does not get it again, and a
+        finished run offers no snapshot at all.
         """
         async with self._lock:
             live = self._runs.get(run_id)
@@ -155,6 +175,8 @@ class RunRegistry:
                 raise NotFoundError("Run", run_id)
 
             backlog = [e for e in live.events if e.seq > after_seq]
+            if not live.finished:
+                backlog = self._merge_snapshot(live, backlog, after_seq)
             queue: "asyncio.Queue" = asyncio.Queue()
 
             if live.finished:
@@ -246,10 +268,15 @@ class RunRegistry:
             live.seq += 1
             event.seq = live.seq
 
-            # Thoughts are never replayed to a reconnecting client, for the
-            # same reason they are never stored: the transcript must not
-            # change depending on when you looked at it.
-            if not is_ephemeral(event):
+            # Durable events are replayed to any client that attaches or
+            # reconnects. Ephemeral ones are not kept as history -- that would
+            # let a reload change the transcript -- but the *latest* ephemeral
+            # state is snapshotted so a new subscriber learns what the agent is
+            # doing right now. The two are never confused: snapshot never
+            # reaches the database, and the transcript never carries a status.
+            if is_ephemeral(event):
+                self._snapshot_ephemeral(live, event)
+            else:
                 live.events.append(event)
                 if len(live.events) > MAX_BACKLOG_EVENTS:
                     del live.events[0]
@@ -258,6 +285,10 @@ class RunRegistry:
             if final:
                 live.finished = True
                 live.subscribers.clear()
+                # The run is over; its live status is meaningless now, and the
+                # UI drops ephemerals on a terminal event anyway.
+                live.current_status = None
+                live.live_tool_calls.clear()
 
         for queue in subscribers:
             queue.put_nowait(event)
@@ -265,6 +296,49 @@ class RunRegistry:
             # The sentinel every consumer waits for.
             for queue in subscribers:
                 queue.put_nowait(None)
+
+    @staticmethod
+    def _snapshot_ephemeral(live: LiveRun, event: AgentEvent) -> None:
+        """
+        Fold an ephemeral event into the run's live snapshot.
+
+        Only the newest status survives, and tool calls collapse to their
+        latest state per id (a start, then that start plus its end). Replaying
+        this to a late subscriber reproduces the current ephemeral UI without
+        replaying the whole run of thinking.
+        """
+        if event.type == "run_status":
+            live.current_status = event
+        elif event.type == "tool_call_start":
+            live.live_tool_calls[event.tool_call_id] = (event, None)
+        elif event.type == "tool_call_end":
+            existing = live.live_tool_calls.get(event.tool_call_id)
+            if existing is not None:
+                live.live_tool_calls[event.tool_call_id] = (existing[0], event)
+
+    @staticmethod
+    def _merge_snapshot(
+        live: LiveRun, backlog: List[AgentEvent], after_seq: int
+    ) -> List[AgentEvent]:
+        """
+        Interleave the ephemeral snapshot into the durable backlog by ``seq``.
+
+        Each snapshot event keeps its original sequence number, so a
+        reconnecting client past that point is filtered out just like a durable
+        event would be, and the merged stream stays in emission order.
+        """
+        snapshot: List[AgentEvent] = []
+        if live.current_status is not None and live.current_status.seq > after_seq:
+            snapshot.append(live.current_status)
+        for start, end in live.live_tool_calls.values():
+            if start.seq > after_seq:
+                snapshot.append(start)
+            if end is not None and end.seq > after_seq:
+                snapshot.append(end)
+
+        if not snapshot:
+            return backlog
+        return sorted([*backlog, *snapshot], key=lambda e: e.seq)
 
     def _evict_locked(self) -> None:
         if len(self._runs) <= MAX_RETAINED_RUNS:

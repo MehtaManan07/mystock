@@ -3,6 +3,7 @@ import asyncio
 from datetime import date, datetime
 from decimal import Decimal
 import hashlib
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -27,7 +28,8 @@ with patch.dict(os.environ, {
     from app.main import app as application
     from app.core.db.base import Base
     from app.core.db.engine import engine as configured_engine
-    from app.core.exceptions import ConflictError, ExternalServiceError, ValidationError
+    from app.core.exceptions import ConflictError, ExternalServiceError, NotFoundError, ValidationError
+    from app.modules.contacts.models import Contact
     from app.core.storage import ImmutableObjectConflictError, StorageService
     from app.modules.pdf_invoices.models import PdfInvoice
     from app.modules.pdf_invoices.render import GeneratePdfInvoice, render_invoice
@@ -46,7 +48,7 @@ PDF = b"%PDF-1.4\nunit-test-fixture\n%%EOF"
 
 def metadata(**overrides):
     values = dict(invoice_number="36", invoice_date="2026-09-24",
-                  customer_name="Example Buyer", subtotal="100", igst="18", total_amount="118")
+                  customer_id=1, customer_name="Example Buyer", subtotal="100", igst="18", total_amount="118")
     values.update(overrides)
     return PdfInvoiceMetadata(**values)
 
@@ -67,6 +69,7 @@ class MetadataTests(unittest.TestCase):
             {"subtotal": "100.001"}, {"customer_name": " "}, {"invoice_number": "../36"},
             {"cgst": "1"}, {"total_amount": "119"}, {"source": "generated"},
             {"round_off": "1", "total_amount": "119"},
+            {"customer_id": 0}, {"customer_id": -1}, {"customer_id": True}, {"customer_id": "1"},
         ]
         for values in cases:
             with self.subTest(values=values), self.assertRaises(SchemaError):
@@ -133,6 +136,7 @@ class RegisterTests(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(self.engine.dispose)
         Base.metadata.create_all(self.engine)
         with Session(self.engine) as db:
+            db.add(Contact(id=1, name="Example Buyer", phone="Not provided", type="customer", balance=0))
             db.add(User(id=1, username="staff", password="unused", name="Staff", role=Role.STAFF))
             db.commit()
 
@@ -163,8 +167,56 @@ class RegisterTests(unittest.IsolatedAsyncioTestCase):
         with Session(self.engine) as db:
             self.assertEqual(db.scalar(select(func.count()).select_from(PdfInvoice)), 1)
             self.assertEqual(db.scalar(select(func.count()).select_from(Transaction)), 0)
-            for table in ("contacts", "payments", "inventory_log", "container_product", "product"):
+            self.assertEqual(db.scalar(select(func.count()).select_from(Contact)), 1)
+            self.assertEqual(db.get(Contact, 1).balance, Decimal("0"))
+            self.assertEqual(first.customer_id, 1)
+            for table in ("payments", "inventory_log", "container_product", "product"):
                 self.assertEqual(db.scalar(select(func.count()).select_from(Base.metadata.tables[table])), 0)
+
+    async def test_new_registration_requires_an_explicit_active_customer(self):
+        with self.assertRaises(ValidationError):
+            await self.register(metadata(customer_id=None))
+        with self.assertRaises(NotFoundError):
+            await self.register(metadata(customer_id=999))
+        with Session(self.engine) as db:
+            db.get(Contact, 1).type = "supplier"
+            db.commit()
+        with self.assertRaises(ValidationError):
+            await self.register()
+        with Session(self.engine) as db:
+            db.get(Contact, 1).type = "customer"
+            db.get(Contact, 1).deleted_at = datetime(2026, 10, 20)
+            db.commit()
+        with self.assertRaises(NotFoundError):
+            await self.register()
+        self.upload.assert_not_called()
+        with Session(self.engine) as db:
+            self.assertEqual(db.scalar(select(func.count()).select_from(PdfInvoice)), 0)
+
+    async def test_conflicting_registered_gstin_is_rejected(self):
+        with Session(self.engine) as db:
+            db.get(Contact, 1).gstin = "24ABCDE1234F1Z5"
+            db.commit()
+        with self.assertRaises(ValidationError):
+            await self.register(metadata(customer_gstin="07ABCDE1234F1Z5"))
+        self.upload.assert_not_called()
+
+    async def test_old_sidecar_replay_preserves_backfilled_link_and_hash(self):
+        first = await self.register()
+        legacy = metadata(customer_id=None)
+        canonical = json.dumps(legacy.model_dump(mode="json", exclude={"customer_id"}),
+                               sort_keys=True, separators=(",", ":"))
+        with Session(self.engine) as db:
+            row = db.get(PdfInvoice, first.id)
+            self.assertEqual(row.metadata_sha256, hashlib.sha256(canonical.encode()).hexdigest())
+            db.get(Contact, 1).name = "New name"
+            db.get(Contact, 1).deleted_at = datetime(2026, 10, 20)
+            db.commit()
+        replay = await self.register(legacy)
+        self.assertEqual((replay.id, replay.customer_id), (first.id, 1))
+        with self.assertRaises(ConflictError):
+            await self.register(metadata(customer_id=2))
+        self.upload.assert_called_once()
 
     async def test_existing_transaction_number_or_pdf_checksum_cannot_be_imported(self):
         with Session(self.engine) as db:
@@ -335,7 +387,7 @@ class UploadAndCliTests(unittest.TestCase):
 
     def test_generate_failure_retains_exact_pdf_and_metadata_for_retry(self):
         spec = GeneratePdfInvoice(
-            invoice_number="36", invoice_date="2026-09-24", customer_name="Buyer", tax_type="igst",
+            invoice_number="36", invoice_date="2026-09-24", customer_id=1, customer_name="Buyer", tax_type="igst",
             line_items=[{"name": "Folder", "quantity": 1, "unit_price": "100", "tax_rate": "18"}],
         )
         with tempfile.TemporaryDirectory() as directory:
@@ -373,6 +425,9 @@ class UploadAndCliTests(unittest.TestCase):
             download.return_value.content = PDF
             self.assertEqual(cli.register_pdf(metadata(), path), record)
             self.assertEqual(cli.json.loads(path.with_suffix(".registered.json").read_text()), record)
+            self.assertEqual(cli.register_pdf(metadata(customer_id=None), path), record)
+            with self.assertRaisesRegex(RuntimeError, "different invoice details"):
+                cli.register_pdf(metadata(customer_id=2), path)
 
 
 if __name__ == "__main__":

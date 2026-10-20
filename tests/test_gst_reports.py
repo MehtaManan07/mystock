@@ -324,7 +324,7 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         with Session(self.engine) as db:
             metadata = PdfInvoiceMetadata(
                 invoice_number="PDF-001", invoice_date="2025-09-15", customer_name="Buyer",
-                customer_gstin=BUYER, subtotal=100, cgst=9, sgst=9, total_amount=118,
+                customer_id=1, customer_gstin=BUYER, subtotal=100, cgst=9, sgst=9, total_amount=118,
                 source="generated", line_items=[dict(name="Goods", quantity=10, unit_price=10, tax_rate=18, hsn_code="44111200")],
             )
             content = b"%PDF-1.4\nfixture\n%%EOF"

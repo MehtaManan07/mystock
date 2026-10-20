@@ -19,6 +19,7 @@ class PdfInvoice(BaseModel):
     invoice_number: Mapped[str] = mapped_column(String(50), nullable=False)
     invoice_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     financial_year: Mapped[str] = mapped_column(String(9), nullable=False)
+    customer_id: Mapped[int | None] = mapped_column(ForeignKey("contacts.id"), index=True)
     customer_name: Mapped[str] = mapped_column(String(255), nullable=False)
     customer_gstin: Mapped[str | None] = mapped_column(String(15))
     customer_address: Mapped[str | None] = mapped_column(String(500))

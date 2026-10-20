@@ -7,8 +7,10 @@ from typing import List
 from fastapi import APIRouter, Depends, Query
 
 from app.core.response_interceptor import skip_interceptor
+from app.modules.users.auth import TokenData, require_any_role
+from .bills import ContactBillsService
 from .service import ContactsService
-from .schemas import ContactResponse, CreateContactDto, UpdateContactDto, FilterContactsDto
+from .schemas import ContactBillPage, ContactResponse, CreateContactDto, UpdateContactDto, FilterContactsDto
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
 
@@ -54,6 +56,17 @@ async def get_contact_by_id(contact_id: int):
     """Get contact by ID (excludes soft-deleted contacts)"""
     contact = await ContactsService.find_one(contact_id)
     return contact
+
+
+@router.get("/{contact_id}/bills", response_model=ContactBillPage)
+async def get_contact_bills(
+    contact_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+    current_user: TokenData = Depends(require_any_role),
+):
+    """Read transaction and standalone PDF bills without changing accounting."""
+    return await ContactBillsService.list_bills(contact_id, page, page_size)
 
 
 @router.patch("/{contact_id}", response_model=ContactResponse)

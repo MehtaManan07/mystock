@@ -34,6 +34,7 @@ class PdfInvoiceMetadata(BaseModel):
 
     invoice_number: str = Field(min_length=1, max_length=50, pattern=r"^[A-Za-z0-9][A-Za-z0-9/-]*$")
     invoice_date: date
+    customer_id: int | None = Field(default=None, gt=0, strict=True)
     customer_name: str = Field(min_length=1, max_length=255)
     customer_gstin: str | None = Field(default=None, pattern=r"^[0-9]{2}[A-Z0-9]{13}$")
     customer_address: str | None = Field(default=None, max_length=500)

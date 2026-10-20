@@ -43,7 +43,7 @@ def convert_spec(spec: dict) -> GeneratePdfInvoice:
             })
         converted = GeneratePdfInvoice(
             invoice_number=spec["invoice_number"], invoice_date=spec["date"],
-            customer_name=contact.name, customer_gstin=contact.gstin,
+            customer_id=contact.id, customer_name=contact.name, customer_gstin=contact.gstin,
             customer_phone=contact.phone, customer_address=contact.address,
             tax_type=spec["tax_type"], total_amount=spec.get("total_amount"),
             line_items=lines, notes=spec.get("notes"),

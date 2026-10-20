@@ -15,6 +15,7 @@ from app.core.config import config
 from app.core.db.engine import run_db
 from app.core.exceptions import ConflictError, ExternalServiceError, NotFoundError, ValidationError
 from app.core.storage import ImmutableObjectConflictError, StorageService
+from app.modules.contacts.models import Contact, ContactType
 from app.modules.transactions.models import Transaction
 from .models import PdfInvoice
 from .schemas import PdfInvoiceMetadata, PdfInvoicePage, PdfInvoiceResponse, financial_year
@@ -42,7 +43,10 @@ class PdfInvoiceService:
         db: Session, metadata: PdfInvoiceMetadata, content: bytes, filename: str, user_id: int
     ) -> PdfInvoice:
         pdf_hash = hashlib.sha256(content).hexdigest()
-        canonical = json.dumps(metadata.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+        # The contact link is not printed metadata; preserve hashes and old sidecar retries.
+        canonical = json.dumps(
+            metadata.model_dump(mode="json", exclude={"customer_id"}), sort_keys=True, separators=(",", ":")
+        )
         metadata_hash = hashlib.sha256(canonical.encode()).hexdigest()
         year = financial_year(metadata.invoice_date)
         matches = db.scalars(select(PdfInvoice).where(or_(
@@ -51,6 +55,8 @@ class PdfInvoiceService:
         ))).all()
         if matches:
             if len(matches) == 1 and matches[0].pdf_sha256 == pdf_hash and matches[0].metadata_sha256 == metadata_hash:
+                if metadata.customer_id is not None and metadata.customer_id != matches[0].customer_id:
+                    raise ConflictError("This invoice is already registered with a different customer link")
                 return matches[0]
             raise ConflictError("This PDF or invoice number is already registered with different details")
 
@@ -60,6 +66,17 @@ class PdfInvoiceService:
         )).limit(1)).first()
         if existing:
             raise ConflictError("This invoice is already tracked in Transactions; do not register it twice")
+
+        if metadata.customer_id is None:
+            raise ValidationError("Select an existing customer (customer_id) before registering a new PDF invoice")
+        customer = db.get(Contact, metadata.customer_id)
+        if customer is None or customer.deleted_at is not None:
+            raise NotFoundError("Customer", metadata.customer_id)
+        if customer.type not in (ContactType.customer, ContactType.both):
+            raise ValidationError("The selected contact must be a customer")
+        gstin = (customer.gstin or "").strip().upper()
+        if gstin and metadata.customer_gstin and gstin != metadata.customer_gstin:
+            raise ValidationError("The invoice GSTIN differs from the selected customer's GSTIN")
 
         prefix = config.gcp_invoice_prefix.strip("/")
         storage_key = f"{prefix + '/' if prefix else ''}standalone/{year}/{pdf_hash}.pdf"
