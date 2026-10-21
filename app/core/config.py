@@ -23,6 +23,15 @@ class Config(BaseSettings):
     access_token_expire_minutes: int = Field(
         default=10080, alias="ACCESS_TOKEN_EXPIRE_MINUTES"
     )
+
+    # Assistant / LLM (Groq by default — the whole agent is tuned for its
+    # free-tier token budget; swapping providers is a one-line change in llm.py)
+    assistant_api_key: str = Field(default="", alias="ASSISTANT_API_KEY")
+    assistant_model: str = Field(
+        default="openai/gpt-oss-20b", alias="ASSISTANT_MODEL"
+    )
+    assistant_max_tokens: int = Field(default=1024, alias="ASSISTANT_MAX_TOKENS")
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
