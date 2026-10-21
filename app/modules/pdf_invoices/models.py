@@ -39,3 +39,15 @@ class PdfInvoice(BaseModel):
     storage_key: Mapped[str] = mapped_column(String(500), nullable=False)
     upload_status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
     created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+
+
+class PdfInvoiceNumberReservation(BaseModel):
+    """A durable number for rendering a new PDF, not an issued invoice or receivable."""
+
+    __tablename__ = "pdf_invoice_number_reservations"
+
+    request_id: Mapped[str] = mapped_column(String(36), unique=True, nullable=False)
+    invoice_number: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    spec_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    customer_id: Mapped[int] = mapped_column(ForeignKey("contacts.id"), nullable=False)
+    created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)

@@ -11,14 +11,16 @@ import os
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlparse
+from uuid import uuid4
 
 import requests
 from fastapi import HTTPException
 from sqlalchemy import select
 
 from app.core.db.engine import SessionLocal
+from app.core.invoice_filenames import invoice_filename
 from app.modules.pdf_invoices.render import GeneratePdfInvoice, render_invoice
-from app.modules.pdf_invoices.schemas import PdfInvoiceMetadata, PdfInvoiceResponse
+from app.modules.pdf_invoices.schemas import PdfInvoiceMetadata, PdfInvoiceNumberResponse, PdfInvoiceResponse
 from app.modules.pdf_invoices.service import validate_pdf
 from app.modules.settings.models import CompanySettings
 
@@ -107,16 +109,65 @@ def register_pdf(metadata: PdfInvoiceMetadata, path: Path) -> dict:
     return record
 
 
-def generate(spec: GeneratePdfInvoice, output: Path, preview: bool = False) -> None:
-    if output.suffix.lower() != ".pdf":
-        raise ValueError("The output filename must end in .pdf")
+def reserve_number(spec: GeneratePdfInvoice, directory: Path) -> str:
+    url, token = api_config()
+    canonical = json.dumps(spec.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+    fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
+    request_path = directory / "generation-request.json"
+    if request_path.exists():
+        request = json.loads(request_path.read_text())
+        if (request["spec_sha256"] != fingerprint or request["customer_id"] != spec.customer_id
+                or request["api_url"] != url):
+            raise ValueError("This output directory belongs to a different bill or API; use its original spec to recover")
+    else:
+        request = {
+            "request_id": str(uuid4()), "customer_id": spec.customer_id,
+            "spec_sha256": fingerprint, "api_url": url,
+        }
+        # Retain the idempotency key before making a request that may time out after committing.
+        with request_path.open("x") as handle:
+            json.dump(request, handle, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
+    response = requests.post(
+        f"{url}/pdf-invoices/reserve-number",
+        headers={"Authorization": f"Bearer {token}"},
+        json={key: value for key, value in request.items() if key != "api_url"},
+        timeout=(15, 60), allow_redirects=False,
+    )
+    if response.status_code != 201:
+        raise RuntimeError(
+            f"Number reservation failed (HTTP {response.status_code}): {response.text}. "
+            "Retry generate with the same spec and directory; do not choose a number manually."
+        )
+    payload = response.json()
+    reserved = PdfInvoiceNumberResponse.model_validate(payload.get("data", payload))
+    if (str(reserved.request_id) != request["request_id"] or reserved.customer_id != spec.customer_id
+            or reserved.spec_sha256 != fingerprint):
+        raise RuntimeError("API returned a different numbering reservation; stop and inspect before issuing")
+    receipt_path = directory / "number-reservation.json"
+    if receipt_path.exists():
+        if PdfInvoiceNumberResponse.model_validate_json(receipt_path.read_text()) != reserved:
+            raise RuntimeError("The saved invoice number changed; stop and inspect before issuing")
+    else:
+        with receipt_path.open("x") as handle:
+            handle.write(reserved.model_dump_json(indent=2))
+    return reserved.invoice_number
+
+
+def generate(spec: GeneratePdfInvoice, output: Path, preview: bool = False) -> Path:
+    if not output.is_dir():
+        raise ValueError("Output must be an existing per-bill directory; filenames are generated automatically")
+    if not preview and spec.invoice_number is not None:
+        raise ValueError("Omit invoice_number for new bills; use import to archive an already-issued invoice")
+    if not preview and spec.customer_id is None:
+        raise ValueError("Supply the existing customer's customer_id before generating a final invoice")
+    number = (spec.invoice_number or "DRAFT") if preview else reserve_number(spec, output)
+    spec = spec.model_copy(update={"invoice_number": number})
+    output = output / invoice_filename(number, spec.customer_name, spec.invoice_date)
     metadata_path = output.with_suffix(".metadata.json")
     if output.exists() or metadata_path.exists():
         raise FileExistsError("Output or metadata already exists. Retry import rather than overwriting an invoice")
-    if not preview:
-        if spec.customer_id is None:
-            raise ValueError("Supply the existing customer's customer_id before generating a final invoice")
-        api_config()
     metadata, content = render_invoice(spec, load_seller())
     # Keep a durable sidecar and the exact bytes even if the upload fails.
     with metadata_path.open("x") as f:
@@ -127,6 +178,7 @@ def generate(spec: GeneratePdfInvoice, output: Path, preview: bool = False) -> N
         print(f"UNREGISTERED PREVIEW: {output}. Do not issue until imported into PDF Bills.")
     else:
         register_pdf(metadata, output)
+    return output
 
 
 def main() -> None:
@@ -134,7 +186,7 @@ def main() -> None:
     commands = parser.add_subparsers(dest="command", required=True)
     create = commands.add_parser("generate", help="Render the standard PDF and archive it before reporting success")
     create.add_argument("spec", type=Path)
-    create.add_argument("output", type=Path)
+    create.add_argument("output", type=Path, help="Existing private per-bill directory; number and filename are automatic")
     create.add_argument("--preview", action="store_true", help="Explicitly opt out of archiving for a draft only")
     upload = commands.add_parser("import", help="Archive an existing PDF unchanged (safe to retry identical input)")
     upload.add_argument("metadata", type=Path)

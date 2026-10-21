@@ -12,6 +12,7 @@ from sqlalchemy import select, func, desc, tuple_, insert as sa_insert, update a
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.db.engine import run_db
+from app.core.invoice_numbers import next_sale_number
 from app.core.exceptions import ValidationError, NotFoundError
 from .models import (
     Transaction,
@@ -242,7 +243,9 @@ class TransactionsService:
         Generate unique transaction number based on type.
         Format: SALE-0001, SALE-0002 or PUR-0001, PUR-0002
         """
-        prefix = "SALE" if transaction_type == TransactionType.sale else "PUR"
+        if transaction_type == TransactionType.sale:
+            return next_sale_number(db)
+        prefix = "PUR"
 
         # Select only the column we need — avoids loading the full entity
         # which would trigger joined eager loads across 5 tables

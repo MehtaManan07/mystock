@@ -18,12 +18,14 @@ from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import select
 
 from app.core.db.engine import run_db
+from app.core.invoice_filenames import invoice_filename
 from app.core.storage import StorageService
 from .invoice_generator import InvoiceGenerator
 from app.core.config import config
 from app.core.exceptions import NotFoundError, ValidationError
 from app.modules.transactions.models import Transaction, TransactionItem
 from app.modules.settings.models import CompanySettings
+from app.modules.contacts.models import Contact
 
 
 # Thread pool for CPU-bound PDF generation (non-blocking)
@@ -226,15 +228,19 @@ class InvoiceService:
         """
         def _generate_presigned_url(db: Session) -> str:
             # Fetch invoice URL from database
-            query = select(Transaction.invoice_url).where(
+            query = select(
+                Transaction.invoice_url, Transaction.transaction_number,
+                Transaction.transaction_date, Contact.name,
+            ).join(Contact, Contact.id == Transaction.contact_id).where(
                 Transaction.id == transaction_id, Transaction.deleted_at.is_(None)
             )
 
             result = db.execute(query)
-            invoice_url = result.scalar_one_or_none()
+            row = result.one_or_none()
 
-            if not invoice_url:
+            if row is None or not row.invoice_url:
                 raise ValidationError("Invoice not yet generated for this transaction")
+            invoice_url = row.invoice_url
 
             # Extract storage key from URL
             # GCS URL format: https://storage.googleapis.com/bucket/key
@@ -271,7 +277,10 @@ class InvoiceService:
                 raise ValidationError(f"Unsupported invoice URL format: {invoice_url}")
 
             # Generate signed URL (no cloud storage API call)
-            presigned_url = StorageService.generate_presigned_url(storage_key, expiration)
+            presigned_url = StorageService.generate_presigned_url(
+                storage_key, expiration,
+                download_filename=invoice_filename(row.transaction_number, row.name, row.transaction_date),
+            )
 
             return presigned_url
 

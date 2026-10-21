@@ -6,11 +6,22 @@ from pydantic import ValidationError as SchemaError
 
 from app.core.exceptions import ValidationError
 from app.modules.users.auth import TokenData, require_admin_or_staff, require_any_role
-from .schemas import PdfInvoiceMetadata, PdfInvoicePage, PdfInvoiceResponse
+from .schemas import (
+    PdfInvoiceMetadata, PdfInvoiceNumberResponse, PdfInvoicePage, PdfInvoiceResponse,
+    ReservePdfInvoiceNumber,
+)
 from .service import MAX_PDF_BYTES, PdfInvoiceService
 
 
 router = APIRouter(prefix="/pdf-invoices", tags=["pdf-invoices"])
+
+
+@router.post("/reserve-number", response_model=PdfInvoiceNumberResponse, status_code=201)
+async def reserve_pdf_invoice_number(
+    request: ReservePdfInvoiceNumber,
+    current_user: TokenData = Depends(require_admin_or_staff),
+):
+    return await PdfInvoiceService.reserve_number(request, current_user.user_id)
 
 
 @router.get("", response_model=PdfInvoicePage)

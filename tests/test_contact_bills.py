@@ -114,6 +114,7 @@ class ContactBillsTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(page.items[1].payment_status)
         self.assertEqual(page.items[1].upload_status, "ready")
         self.assertEqual(page.items[1].model_dump(mode="json")["total_amount"], "105.00")
+        self.assertEqual(page.items[1].download_filename, "PDF-1_DIFFERENT-TRADE-NAME_2026-10-19.pdf")
 
         next_page = await ContactBillsService.list_bills(1, 2, 2)
         self.assertEqual([(row.source, row.id) for row in next_page.items], [("transaction", 2)])
@@ -126,6 +127,7 @@ class ContactBillsTests(unittest.IsolatedAsyncioTestCase):
         self.contact(name="Renamed customer", gstin=None)
         page = await ContactBillsService.list_bills(1, 1, 25)
         self.assertEqual([row.id for row in page.items], [1])
+        self.assertEqual(page.items[0].download_filename, "PDF-1_OLD-LEGAL-NAME_2026-10-20.pdf")
 
     async def test_same_name_and_gstin_do_not_override_the_stored_customer_id(self):
         self.pdf(customer_id=2)

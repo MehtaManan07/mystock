@@ -28,6 +28,7 @@ with patch.dict(os.environ, {
     from app.main import app as application
     from app.core.db.base import Base
     from app.core.db.engine import engine as configured_engine
+    from app.core.invoice_filenames import invoice_filename
     from app.core.exceptions import ConflictError, ExternalServiceError, NotFoundError, ValidationError
     from app.modules.contacts.models import Contact
     from app.core.storage import ImmutableObjectConflictError, StorageService
@@ -304,7 +305,7 @@ class RegisterTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValidationError):
             await PdfInvoiceService.list_invoices(1, 25, None, date(2026, 10, 1), date(2026, 9, 1))
         with patch.object(StorageService, "download_file", return_value=PDF):
-            self.assertEqual(await PdfInvoiceService.download(first.id), (PDF, "36.pdf"))
+            self.assertEqual(await PdfInvoiceService.download(first.id), (PDF, "36_EXAMPLE-BUYER_2026-09-24.pdf"))
         with patch.object(StorageService, "download_file", return_value=b"wrong"):
             with self.assertRaises(ConflictError):
                 await PdfInvoiceService.download(first.id)
@@ -387,27 +388,29 @@ class UploadAndCliTests(unittest.TestCase):
 
     def test_generate_failure_retains_exact_pdf_and_metadata_for_retry(self):
         spec = GeneratePdfInvoice(
-            invoice_number="36", invoice_date="2026-09-24", customer_id=1, customer_name="Buyer", tax_type="igst",
+            invoice_date="2026-09-24", customer_id=1, customer_name="Example Buyer", tax_type="igst",
             line_items=[{"name": "Folder", "quantity": 1, "unit_price": "100", "tax_rate": "18"}],
         )
         with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / "bill.pdf"
-            with patch.object(cli, "api_config"), patch.object(cli, "load_seller"), \
-                    patch.object(cli, "render_invoice", return_value=(metadata(), PDF)), \
+            output = Path(directory) / "SALE-0001_EXAMPLE-BUYER_2026-09-24.pdf"
+            expected = metadata(invoice_number="SALE-0001", source="generated", line_items=spec.line_items)
+            with patch.object(cli, "reserve_number", return_value="SALE-0001"), patch.object(cli, "load_seller"), \
+                    patch("app.modules.pdf_invoices.render.InvoiceGenerator.generate_invoice_pdf", return_value=PDF), \
                     patch.object(cli, "register_pdf", side_effect=RuntimeError("upload failed")):
                 with self.assertRaisesRegex(RuntimeError, "upload failed"):
-                    cli.generate(spec, output)
+                    cli.generate(spec, Path(directory))
                 self.assertEqual(output.read_bytes(), PDF)
                 self.assertEqual(PdfInvoiceMetadata.model_validate_json(
-                    output.with_suffix(".metadata.json").read_text()).model_dump(), metadata().model_dump())
+                    output.with_suffix(".metadata.json").read_text()).model_dump(), expected.model_dump())
                 with self.assertRaises(FileExistsError):
-                    cli.generate(spec, output)
+                    cli.generate(spec, Path(directory))
 
     def test_cli_verifies_cloud_bytes_before_writing_registration_receipt(self):
         record = {
             **metadata().model_dump(mode="json"), "id": 1, "financial_year": "2026-2027",
             "original_filename": "bill.pdf", "pdf_sha256": hashlib.sha256(PDF).hexdigest(),
             "upload_status": "ready", "created_at": "2026-09-24T00:00:00", "created_by_id": 1,
+            "download_filename": "36_EXAMPLE-BUYER_2026-09-24.pdf",
         }
         response = Mock(status_code=201)
         response.json.return_value = {"success": True, "data": record}

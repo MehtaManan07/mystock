@@ -112,6 +112,8 @@ class StorageService:
         cls,
         file_key: str,
         expiration: int = 3600,
+        *,
+        download_filename: str | None = None,
     ) -> str:
         """
         Generate a temporary signed URL for secure file download.
@@ -131,6 +133,7 @@ class StorageService:
             from google.auth.transport import requests
             
             credentials, project = google.auth.default()
+            disposition = f'attachment; filename="{download_filename}"' if download_filename else None
             
             # For Compute Engine credentials, use impersonation for signing
             if isinstance(credentials, compute_engine.Credentials):
@@ -151,6 +154,7 @@ class StorageService:
                     expiration=timedelta(seconds=expiration),
                     method="GET",
                     credentials=signing_credentials,
+                    response_disposition=disposition,
                 )
             else:
                 # Local development with service account key file
@@ -158,6 +162,7 @@ class StorageService:
                     version="v4",
                     expiration=timedelta(seconds=expiration),
                     method="GET",
+                    response_disposition=disposition,
                 )
 
             return url

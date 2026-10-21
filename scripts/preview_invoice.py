@@ -42,7 +42,7 @@ def convert_spec(spec: dict) -> GeneratePdfInvoice:
                 "hsn_code": item.get("hsn") or (product.hsn_code if product else None),
             })
         converted = GeneratePdfInvoice(
-            invoice_number=spec["invoice_number"], invoice_date=spec["date"],
+            invoice_number=spec.get("invoice_number"), invoice_date=spec["date"],
             customer_id=contact.id, customer_name=contact.name, customer_gstin=contact.gstin,
             customer_phone=contact.phone, customer_address=contact.address,
             tax_type=spec["tax_type"], total_amount=spec.get("total_amount"),

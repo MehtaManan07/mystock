@@ -30,6 +30,13 @@ upload experimentation. Static checks do not issue HTTP requests.
 
 ## UI and API
 
+The shared-numbering changes require migration `0019_pdf_invoice_numbering`.
+It only adds a number-reservation table; it does not renumber or rewrite invoices.
+This migration has **not been applied**. After review/approval, pause sales/PDF
+writes, apply the migration, replace all old backend writers, then update the CLI
+and frontend before resuming writes. Old writers do not participate in the shared
+numbering lock. Do not deploy the new backend against an unmigrated database.
+
 All authenticated roles can search/filter the register and view/download PDFs.
 The list sorts by date added (`created_at`), newest first, with descending record
 ID breaking timestamp ties across pages. Printed invoice dates do not affect
@@ -54,6 +61,7 @@ Authenticated endpoints (under `/api`):
 | `GET /pdf-invoices/{id}` | Stored metadata and upload status |
 | `GET /pdf-invoices/{id}/file` | Checksum-verified PDF, proxied through the API |
 | `POST /pdf-invoices` | Multipart `metadata` (JSON string) and `file` (original PDF) |
+| `POST /pdf-invoices/reserve-number` | ADMIN/STAFF: reserve a new sales number with `request_id` (UUID), `customer_id`, and `spec_sha256` |
 
 Metadata is stored in Postgres `pdf_invoices`. Objects are stored in the existing
 bucket at `<GCP_INVOICE_PREFIX>/standalone/<financial-year>/<sha256>.pdf`.
@@ -65,6 +73,43 @@ is globally unique in the register. Exact PDF/metadata replay is idempotent.
 Different content or details under the same identity returns 409. Numbers and
 matching original PDF checksums already in Transactions are rejected, including
 soft-deleted transactions, to avoid unintentional duplicate accounting.
+
+## Invoice numbering and download names
+
+New sales transactions and CLI-generated standalone bills use **one shared
+`SALE-####` series**. The allocator considers the highest numeric SALE suffix in
+both registers and all PDF number reservations, including pending, retired and
+unused entries. Plain historical numbers such as `46` are not SALE suffixes:
+`46` and `SALE-0046` remain different, unchanged invoice identities. Purchase
+numbering stays in its existing `PUR-####` series. There is no annual reset.
+
+Sales creation, PDF number reservation and PDF registration/import hold the same
+PostgreSQL transaction-scoped advisory lock until commit/rollback. The reservation
+endpoint persists a number before local rendering. Repeating its request UUID
+with the same customer, user and specification hash returns the same number;
+changing those details returns a conflict. A reservation creates no PDF invoice,
+GST snapshot, stock movement, balance or payment entry. Unused reserved numbers
+are retained, not recycled; keep the request receipt when a bill is abandoned.
+
+Upload/import is **only for PDFs already issued** and must copy their original
+number, even if it belongs to an older numbering scheme. It never assigns a new
+number to existing bytes. An import cannot take a number reserved for a different
+bill. The existing immutable-PDF/metadata replay rules continue to apply.
+
+All download paths and new CLI output use
+`<invoice-number>_<CUSTOMER-NAME>_<YYYY-MM-DD>.pdf`, for example:
+
+```text
+46_AZAD-IMITATION_2026-10-20.pdf
+SALE-0063_DABSTER-INTERNATIONAL-PRIVATE-LIMITED_2026-10-21.pdf
+```
+
+Customer names are normalized to uppercase ASCII with hyphen separators, capped
+at 80 characters. Invoice-number slashes are percent-encoded (`29/26-27` becomes
+`29%2F26-27`) rather than collapsed into hyphens. PDF register/contact responses
+include `download_filename`; transaction signed URLs set the same filename via
+Content-Disposition. Historical PDF bytes, GCS keys, invoice numbers, and files
+already in Downloads are not renamed or regenerated.
 
 ## Contact bill history
 
@@ -111,14 +156,13 @@ Run from `mystock` using its venv:
 ```bash
 # Set KC_API_URL to the reviewed backend base ending in /api.
 # Set KC_API_TOKEN securely from an ADMIN or STAFF login; never put it in files.
-venv/bin/python -m scripts.pdf_invoice generate invoice.json /path/to/invoice.pdf
+venv/bin/python -m scripts.pdf_invoice generate invoice.json /path/to/private-bill-directory
 ```
 
 Example input (replace with confirmed customer, tax and product details):
 
 ```json
 {
-  "invoice_number": "39",
   "invoice_date": "2026-09-24",
   "customer_id": 123,
   "customer_name": "Example Buyer",
@@ -147,8 +191,10 @@ may omit it. The CLI reads active seller settings from the backend's configured 
 invoice renderer, stores line-item snapshots, and uploads through the API.
 It does not guess applicable GST/HSN or adjust quantities. `total_amount` may be
 omitted to round up to the next rupee; a supplied amount permits only a small
-round-off, not an undisclosed discount. Invoice numbers are explicit, not
-automatically allocated; check the register and existing issued bills first.
+round-off, not an undisclosed discount. Invoice numbers are
+automatically allocated by the shared reservation endpoint. Omit `invoice_number`
+for new final bills; specifying one is rejected. Check for duplicate orders before
+starting a new run, and use a separate existing private output directory per bill.
 For an unregistered buyer, leave `customer_gstin` null and include the confirmed
 state name and state code in `customer_address`. Do not substitute a PAN for a
 GSTIN. The renderer omits the GSTIN-derived buyer-state line when no GSTIN is
@@ -157,18 +203,26 @@ is local and requires deployment before it affects PDFs generated by the web app
 Invoices show their invoice date only. The shared renderer does not calculate
 or print a payment due date for either transaction or standalone bills.
 
-The output PDF and `.metadata.json` sidecar are retained locally. Success is
+The CLI writes `generation-request.json` before requesting a number, then saves
+`number-reservation.json`. A timeout during reservation is recovered by repeating
+`generate` with the **same spec and directory**, retaining the same request UUID.
+Do not delete these receipts or use a fresh directory to retry a timed-out issue.
+Once a PDF or metadata sidecar exists, `generate` refuses to overwrite it; recover
+with exact-byte `import`, not another render. A reservation is not proof of issue.
+
+The descriptively named output PDF and `.metadata.json` sidecar are retained locally. Success is
 reported only after registration and a checksum-matched cloud download; the
 `.registered.json` receipt contains the saved record.
 
 If the user explicitly requests no printed invoice number, the generation spec
 may set `"show_invoice_number": false`. The register still requires an identifier:
-obtain approval for an internal reference in `invoice_number` and explain it in
-`notes`. That reference and the invoice-number label are omitted from the PDF;
+explain the automatically reserved SALE reference in `notes` and obtain approval
+to omit it from the printed document. That reference and the invoice-number label are omitted from the PDF;
 normal invoices print their number by default. Do not silently treat an internal
 archive reference as an issued invoice serial number.
 
-For an unissued draft only, pass `--preview`. This is explicitly unregistered.
+For an unissued draft only, pass `--preview`. This is explicitly unregistered,
+does not reserve a number, and defaults to `DRAFT` if no preview number is supplied.
 The older `scripts.preview_invoice` accepts earlier item specs but now also
 archives by default; it requires `--preview` to opt out.
 
@@ -241,3 +295,9 @@ Both are offline; run only with permission:
 venv/bin/python -m unittest discover -s tests -p 'test_pdf_invoices.py'
 venv/bin/python -m unittest discover -s tests -p 'test_invoice_bank_details.py'
 ```
+
+`tests/test_invoice_numbering.py` covers shared allocation, durable reservation
+retries, historical identities, CLI recovery and descriptive download names.
+`tests/test_contact_bills.py` also checks filenames use the PDF's original buyer
+snapshot after contact edits. These tests use SQLite/mocks; they do not exercise
+PostgreSQL lock contention or make production/cloud requests.

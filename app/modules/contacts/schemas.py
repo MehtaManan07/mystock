@@ -69,6 +69,7 @@ class ContactBill(BaseModel):
     number: str
     date: date
     total_amount: Decimal
+    download_filename: str
     transaction_type: Literal["sale", "purchase"] | None
     payment_status: Literal["paid", "partial", "unpaid"] | None
     upload_status: Literal["pending", "ready"] | None

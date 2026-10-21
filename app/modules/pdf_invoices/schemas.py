@@ -1,8 +1,11 @@
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
+
+from app.core.invoice_filenames import invoice_filename
 
 
 Money = Annotated[Decimal, Field(ge=0, max_digits=15, decimal_places=2, allow_inf_nan=False)]
@@ -79,7 +82,7 @@ class PdfInvoiceMetadata(BaseModel):
 
 
 class PdfInvoiceResponse(PdfInvoiceMetadata):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     id: int
     financial_year: str
@@ -88,6 +91,28 @@ class PdfInvoiceResponse(PdfInvoiceMetadata):
     upload_status: Literal["pending", "ready"]
     created_at: datetime
     created_by_id: int
+
+    @computed_field
+    @property
+    def download_filename(self) -> str:
+        return invoice_filename(self.invoice_number, self.customer_name, self.invoice_date)
+
+
+class ReservePdfInvoiceNumber(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: UUID
+    customer_id: int = Field(gt=0, strict=True)
+    spec_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+class PdfInvoiceNumberResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    request_id: UUID
+    invoice_number: str = Field(pattern=r"^SALE-[0-9]{4,}$")
+    customer_id: int
+    spec_sha256: str
 
 
 class PdfInvoicePage(BaseModel):

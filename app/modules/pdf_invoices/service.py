@@ -13,12 +13,17 @@ from sqlalchemy.orm import Session
 
 from app.core.config import config
 from app.core.db.engine import run_db
+from app.core.invoice_filenames import invoice_filename
+from app.core.invoice_numbers import lock_sales_numbering, next_sale_number
 from app.core.exceptions import ConflictError, ExternalServiceError, NotFoundError, ValidationError
 from app.core.storage import ImmutableObjectConflictError, StorageService
 from app.modules.contacts.models import Contact, ContactType
 from app.modules.transactions.models import Transaction
-from .models import PdfInvoice
-from .schemas import PdfInvoiceMetadata, PdfInvoicePage, PdfInvoiceResponse, financial_year
+from .models import PdfInvoice, PdfInvoiceNumberReservation
+from .schemas import (
+    PdfInvoiceMetadata, PdfInvoiceNumberResponse, PdfInvoicePage, PdfInvoiceResponse,
+    ReservePdfInvoiceNumber, financial_year,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -39,6 +44,40 @@ def validate_pdf(content: bytes) -> None:
 
 class PdfInvoiceService:
     @staticmethod
+    async def reserve_number(request: ReservePdfInvoiceNumber, user_id: int) -> PdfInvoiceNumberResponse:
+        def reserve(db: Session):
+            lock_sales_numbering(db)
+            existing = db.scalar(select(PdfInvoiceNumberReservation).where(
+                PdfInvoiceNumberReservation.request_id == str(request.request_id),
+            ))
+            if existing is not None:
+                if (existing.customer_id != request.customer_id or existing.created_by_id != user_id
+                        or existing.spec_sha256 != request.spec_sha256):
+                    raise ConflictError("This numbering request already belongs to a different bill")
+                return PdfInvoiceNumberResponse.model_validate(existing)
+            PdfInvoiceService._customer(db, request.customer_id)
+            row = PdfInvoiceNumberReservation(
+                request_id=str(request.request_id), invoice_number=next_sale_number(db),
+                customer_id=request.customer_id, created_by_id=user_id, spec_sha256=request.spec_sha256,
+            )
+            db.add(row)
+            db.flush()
+            return PdfInvoiceNumberResponse.model_validate(row)
+
+        return await run_db(reserve)
+
+    @staticmethod
+    def _customer(db: Session, customer_id: int | None) -> Contact:
+        if customer_id is None:
+            raise ValidationError("Select an existing customer (customer_id) before registering a new PDF invoice")
+        customer = db.get(Contact, customer_id)
+        if customer is None or customer.deleted_at is not None:
+            raise NotFoundError("Customer", customer_id)
+        if customer.type not in (ContactType.customer, ContactType.both):
+            raise ValidationError("The selected contact must be a customer")
+        return customer
+
+    @staticmethod
     def _reserve(
         db: Session, metadata: PdfInvoiceMetadata, content: bytes, filename: str, user_id: int
     ) -> PdfInvoice:
@@ -49,6 +88,7 @@ class PdfInvoiceService:
         )
         metadata_hash = hashlib.sha256(canonical.encode()).hexdigest()
         year = financial_year(metadata.invoice_date)
+        lock_sales_numbering(db)
         matches = db.scalars(select(PdfInvoice).where(or_(
             PdfInvoice.pdf_sha256 == pdf_hash,
             (PdfInvoice.invoice_number == metadata.invoice_number) & (PdfInvoice.financial_year == year),
@@ -67,13 +107,17 @@ class PdfInvoiceService:
         if existing:
             raise ConflictError("This invoice is already tracked in Transactions; do not register it twice")
 
-        if metadata.customer_id is None:
-            raise ValidationError("Select an existing customer (customer_id) before registering a new PDF invoice")
-        customer = db.get(Contact, metadata.customer_id)
-        if customer is None or customer.deleted_at is not None:
-            raise NotFoundError("Customer", metadata.customer_id)
-        if customer.type not in (ContactType.customer, ContactType.both):
-            raise ValidationError("The selected contact must be a customer")
+        reservation = db.scalar(select(PdfInvoiceNumberReservation).where(
+            PdfInvoiceNumberReservation.invoice_number == metadata.invoice_number,
+        ))
+        if reservation is not None:
+            if (metadata.source != "generated" or reservation.customer_id != metadata.customer_id
+                    or reservation.created_by_id != user_id):
+                raise ConflictError("This sales number is reserved for another bill")
+            if db.scalar(select(PdfInvoice.id).where(PdfInvoice.invoice_number == metadata.invoice_number).limit(1)):
+                raise ConflictError("This reserved sales number has already been issued")
+
+        customer = PdfInvoiceService._customer(db, metadata.customer_id)
         gstin = (customer.gstin or "").strip().upper()
         if gstin and metadata.customer_gstin and gstin != metadata.customer_gstin:
             raise ValidationError("The invoice GSTIN differs from the selected customer's GSTIN")
@@ -193,4 +237,4 @@ class PdfInvoiceService:
         if hashlib.sha256(content).hexdigest() != row.pdf_sha256:
             logger.error("Stored PDF checksum mismatch for register id %s", row.id)
             raise ConflictError("Stored PDF failed its integrity check; download stopped")
-        return content, row.invoice_number.replace("/", "-") + ".pdf"
+        return content, invoice_filename(row.invoice_number, row.customer_name, row.invoice_date)

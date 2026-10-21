@@ -14,7 +14,7 @@ from .schemas import InvoiceLine, Money, PdfInvoiceMetadata
 class GeneratePdfInvoice(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    invoice_number: str
+    invoice_number: str | None = None
     show_invoice_number: bool = Field(default=True, strict=True)
     invoice_date: date
     customer_id: int | None = Field(default=None, gt=0, strict=True)
@@ -29,6 +29,8 @@ class GeneratePdfInvoice(BaseModel):
 
 
 def render_invoice(spec: GeneratePdfInvoice, seller: SimpleNamespace) -> tuple[PdfInvoiceMetadata, bytes]:
+    if not spec.invoice_number:
+        raise ValueError("Reserve an invoice number before rendering a final PDF")
     items = []
     buckets: dict[Decimal, Decimal] = {}
     subtotal = Decimal("0.00")
