@@ -25,7 +25,7 @@ class Config(BaseSettings):
     )
 
     # Assistant / LLM (Groq by default — the whole agent is tuned for its
-    # free-tier token budget; swapping providers is a one-line change in llm.py)
+    # free-tier token budget; the provider is constructed in graph.py)
     assistant_api_key: str = Field(default="", alias="ASSISTANT_API_KEY")
     assistant_model: str = Field(
         default="openai/gpt-oss-20b", alias="ASSISTANT_MODEL"

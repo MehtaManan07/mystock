@@ -3,17 +3,20 @@ Assistant module.
 
 A streaming agentic chat surface over the business's own records.
 
-Everything here is production code with one exception: ``llm.py``, which
-streams scripted text instead of calling a model. Swapping in a real provider
-is a change to that file alone.
+The agent is a LangGraph graph: the model reasons, calls read tools, sees the
+results, and decides again before answering. LangGraph owns that loop; this
+module owns everything the browser sees -- streaming transport, multi-tab
+fan-out, cancellation and the persisted transcript.
 
 Layout:
 
     models.py    threads, messages, runs
     services/    persistence, split by aggregate (thread, message, run)
     runtime.py   live runs -- queues, fan-out, cooperative cancellation
-    agent.py     thread in, event stream out
-    llm.py       the model call (stubbed)
+    agent.py     thread in, event stream out (drives the graph)
+    graph.py     the LangGraph agent graph (model + tools loop)
+    tools.py     the read-only capabilities the agent may call
+    adapter.py   LangGraph's event stream -> our streaming contract
     events.py    the wire contract shared with the UI
     routers/     HTTP, split by resource; combined under /assistant
 """

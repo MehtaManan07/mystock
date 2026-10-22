@@ -42,23 +42,25 @@ Rules that must survive every phase:
 Goal: a real model calls one real tool and streams a grounded answer through
 our existing SSE pipe, with a live tool chip. No writes, no HITL yet.
 
-- [ ] 1.1 Define the LangGraph graph: `model` node + `tools` node + conditional
+- [x] 1.1 Define the LangGraph graph: `model` node + `tools` node + conditional
       edge (tool_calls? → tools → model; else → END)
-- [ ] 1.2 First tool: `get_expense_total(period)` (or similar) — `@tool`,
-      typed args, calls the existing expense service read path
-- [ ] 1.3 Build the **adapter**: consume `graph.astream_events(...)` and map →
+- [x] 1.2 First tool: `get_business_summary()` (dashboard read path) — `@tool`,
+      wraps `DashboardService.get_dashboard_data` via `run_db`; returns a
+      compact, Indian-formatted text snapshot. (No `expenses` module exists;
+      the dashboard already aggregates income/expenses/stock/outstanding.)
+- [x] 1.3 Build the **adapter**: consume `graph.astream_events(...)` and map →
       our `AgentEvent`s:
       - model text deltas → `text_message_start/content/end`
       - tool start → `tool_call_start` (user-facing `label`, not tool name)
       - tool end → `tool_call_end`
       - status gaps → `run_status` (`thinking`/`generating`)
-- [ ] 1.4 Rewrite `run_agent` in `agent.py` to drive the graph via the adapter
+- [x] 1.4 Rewrite `run_agent` in `agent.py` to drive the graph via the adapter
       instead of streaming `StubLLM`; keep the same `AsyncIterator[AgentEvent]`
       signature so `runtime.py` is untouched
-- [ ] 1.5 Working state: build the graph's input messages from persisted
+- [x] 1.5 Working state: build the graph's input messages from persisted
       history ONLY (reuse `build_context`'s budget trim); tool results live in
       graph state, never in the transcript
-- [ ] 1.6 Retire `StubLLM` path: `get_llm()` no longer used by the graph; keep
+- [x] 1.6 Retire `StubLLM` path: `get_llm()` no longer used by the graph; keep
       the file only if a stub is still wanted for tests, else delete
 - [ ] 1.7 Verify: ask a question that needs the tool → chip appears → grounded
       answer streams → reload shows transcript without the chip (ephemeral held)
@@ -118,6 +120,18 @@ only**. Our DB still owns the transcript.
       point" section with the graph + HITL flow
 - [ ] 5.4 Confirm no ephemeral leakage into transcript or model context after
       all the new event types
+
+## Memory strategy (decided 2026-10-22)
+
+KC conversations are **task-shaped, not companion-shaped** (ask a balance, make
+a bill, check sales — a few turns, done). Therefore:
+- **Threads stay short + task-scoped**; nudge "new chat" per task in the UI.
+- **Real long-term memory = Postgres**, surfaced via *tools* on demand — NOT
+  conversation history. A good lookup tool beats remembering 200 turns.
+- **No summarization / RAG for now.** `build_context`'s char-trim
+  (`MAX_CONTEXT_CHARS`) is sufficient because threads rarely outlive the window.
+- Revisit summarization (threshold-triggered: compress oldest turns, keep recent
+  verbatim) or `pgvector` RAG **only if** real usage shows long single threads.
 
 ## Open questions (resolve before/within the phase that needs them)
 
