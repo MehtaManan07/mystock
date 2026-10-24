@@ -65,17 +65,25 @@ our existing SSE pipe, with a live tool chip. No writes, no HITL yet.
 - [ ] 1.7 Verify: ask a question that needs the tool → chip appears → grounded
       answer streams → reload shows transcript without the chip (ephemeral held)
 
-## Phase 2 — Tool layer (read tools over the business)
+## Phase 2 — Tool layer (v0 read tools over the business)
 
-- [ ] 2.1 `get_stock(product?/low_only)` → inventory service
-- [ ] 2.2 `get_sales(period, contact?)` → transaction service
-- [ ] 2.3 `get_contact_balance(contact)` → contacts service
-- [ ] 2.4 `get_expense_breakdown(period)` → categorized expenses
-- [ ] 2.5 Tool-result shaping: return compact structured data, not giant tables
-      (token budget — widgets doc already argues "answer + link", not 50 rows)
-- [ ] 2.6 System prompt: enumerate tools + the Indian-number / "say so if no
-      data" rules already in `SYSTEM_PROMPT`
-- [ ] 2.7 Verify each tool against known values from the real DB
+Curated + **parameterized** (one tool covers many phrasings; LLM fills args,
+never writes SQL — see docs/assistant-tools.md).
+
+- [x] 2.1 `find_products(search?, low_stock_only?)` → ProductsService; price,
+      SKU, in-stock qty. Covers "stock of X", "price of X", "what's low".
+- [x] 2.2 `find_contacts(search?, owes_money_only?)` → ContactsService; phone,
+      type, balance. Covers "how much does X owe", "do we have customer X".
+- [x] 2.3 `get_transactions(days?, contact_name?, kind?)` → TransactionsService;
+      recent sales/purchases, optionally by contact. Covers "what did we sell".
+- [x] 2.4 `get_expense_summary(days?)` → PaymentsService.get_summary; spends,
+      earnings, category breakdown.
+- [x] 2.5 Tool-result shaping: compact text, cap rows, note when truncated
+      (token budget).
+- [x] 2.6 System prompt holds role + behaviour rules (ground answers, Indian
+      numbers, "say so if no data"); tool *selection* lives in each tool's
+      docstring, NOT duplicated in the prompt.
+- [ ] 2.7 Verify each tool against known values from the real DB.
 
 ## Phase 3 — Guardrails (the control edges)
 

@@ -3,9 +3,10 @@ Dashboard DTOs (Data Transfer Objects)
 """
 
 from pydantic import BaseModel, Field
-from typing import List
-from datetime import datetime
+from datetime import date
 from decimal import Decimal
+from enum import Enum
+from typing import Literal
 
 
 class DashboardStatsResponse(BaseModel):
@@ -20,51 +21,83 @@ class DashboardStatsResponse(BaseModel):
         from_attributes = True
 
 
-class DashboardFinancialOverviewResponse(BaseModel):
-    """Financial overview for dashboard"""
-    
-    total_income: Decimal = Field(..., description="Total income/earnings")
-    total_expenses: Decimal = Field(..., description="Total expenses/spends")
-    net_balance: Decimal = Field(..., description="Net balance (income - expenses)")
-    
-    class Config:
-        from_attributes = True
+class DashboardPeriod(str, Enum):
+    month = "month"
+    last_month = "last_month"
+    last_90_days = "90_days"
 
 
-class DashboardTransactionResponse(BaseModel):
-    """Simplified transaction data for dashboard"""
-    
-    id: int
-    transaction_number: str
-    type: str
-    payment_status: str
-    total_amount: Decimal
-    transaction_date: datetime
-    contact: dict | None = Field(None, description="Contact info (id, name)")
-    
-    class Config:
-        from_attributes = True
+class DashboardWindow(BaseModel):
+    start: date
+    end: date
+    comparison_start: date
+    comparison_end: date
 
 
-class DashboardContactResponse(BaseModel):
-    """Simplified contact data for dashboard (outstanding balances)"""
-    
+class DashboardPerformance(BaseModel):
+    sales: Decimal
+    sale_count: int
+    units_sold: int
+    income: Decimal
+    expenses: Decimal
+    net_cash: Decimal
+
+
+class DashboardCashDay(BaseModel):
+    date: date
+    income: Decimal
+    expenses: Decimal
+
+
+class DashboardBillContact(BaseModel):
     id: int
     name: str
-    type: str
-    balance: Decimal
-    
-    class Config:
-        from_attributes = True
+
+
+class DashboardBill(BaseModel):
+    id: int
+    transaction_number: str
+    type: Literal["sale", "purchase"]
+    payment_status: Literal["paid", "partial", "unpaid"]
+    transaction_date: date
+    total_amount: Decimal
+    balance_due: Decimal
+    age_days: int
+    contact: DashboardBillContact | None
+
+
+class DashboardBalances(BaseModel):
+    receivables: Decimal
+    payables: Decimal
+    receivable_accounts: int
+    payable_accounts: int
+    open_sales_count: int
+    open_purchases_count: int
+    oldest_sales: list[DashboardBill]
+    oldest_purchases: list[DashboardBill]
+
+
+class DashboardBestSeller(BaseModel):
+    id: int
+    name: str
+    size: str
+    packing: str
+    company_sku: str | None
+    units_sold: int
+    stock_on_hand: int
 
 
 class DashboardResponse(BaseModel):
-    """Complete dashboard data response"""
-    
+    as_of: date
+    period: DashboardPeriod
+    window: DashboardWindow
+    current: DashboardPerformance
+    previous: DashboardPerformance
+    cash_flow: list[DashboardCashDay]
+    balances: DashboardBalances
+    best_sellers: list[DashboardBestSeller]
+    sold_products_out_of_stock: int = Field(
+        ..., description="Active products sold in the selected period with current stock <= 0"
+    )
+    recent_transactions: list[DashboardBill]
     stats: DashboardStatsResponse
-    financial_overview: DashboardFinancialOverviewResponse
-    recent_transactions: List[DashboardTransactionResponse]
-    outstanding_contacts: List[DashboardContactResponse]
-    
-    class Config:
-        from_attributes = True

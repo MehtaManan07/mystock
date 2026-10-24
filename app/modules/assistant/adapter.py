@@ -76,7 +76,10 @@ def _text_of(chunk: Any) -> str:
 
 
 async def stream_graph_events(
-    graph: Runnable, messages: list, callbacks: Optional[list] = None
+    graph: Runnable,
+    messages: list,
+    callbacks: Optional[list] = None,
+    recursion_limit: Optional[int] = None,
 ) -> AsyncIterator[AgentEvent]:
     """
     Run the graph and yield our events as the graph works.
@@ -89,18 +92,24 @@ async def stream_graph_events(
     ``callbacks`` are LangChain run callbacks attached to the whole run (e.g. the
     tool-call logger). They are a private, server-side concern -- they observe
     the run but never produce ``AgentEvent``s, so the UI contract is untouched.
+
+    ``recursion_limit`` caps the reason/act loop. Reaching it raises
+    ``GraphRecursionError``, which the runtime catches and reports as a failed
+    run -- a bounded failure instead of an unbounded one.
     """
     current_message_id: Optional[str] = None
     generating = False
 
-    config: Optional[RunnableConfig] = (
-        {"callbacks": callbacks} if callbacks else None
-    )
+    config: RunnableConfig = {}
+    if callbacks:
+        config["callbacks"] = callbacks
+    if recursion_limit is not None:
+        config["recursion_limit"] = recursion_limit
 
     yield RunStatusEvent(status="thinking")
 
     async for event in graph.astream_events(
-        {"messages": messages}, version="v2", config=config
+        {"messages": messages}, version="v2", config=config or None
     ):
         kind = event["event"]
 

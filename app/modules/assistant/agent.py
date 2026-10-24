@@ -43,7 +43,17 @@ SYSTEM_PROMPT = (
     "using the business's own records. You have read-only tools -- use them to "
     "ground every factual answer rather than guessing, and never invent numbers. "
     "Be direct and use Indian number formatting (Rs 1,20,000). If the tools do "
-    "not give you what is needed to answer, say so plainly."
+    "not give you what is needed to answer, say so plainly. "
+    "Only do what your available tools let you do, and never offer or imply an "
+    "action you have no tool for. Your current tools are read-only -- they look "
+    "things up but cannot send messages, reminders or emails, or change records "
+    "-- so do not offer to do those; if asked, say that is not something you can "
+    "do yet. "
+    "Be decisive: gather what you need with as few tool calls as possible, then "
+    "answer. Do not call the same tool again with slightly different parameters "
+    "hoping for a different result -- if a query has already returned the data, "
+    "use it. If a tool returns nothing useful, say so instead of retrying "
+    "variations."
 )
 
 # A crude but honest budget. The free tier allows roughly 8k tokens a minute,
@@ -51,6 +61,15 @@ SYSTEM_PROMPT = (
 # rather than tokens because this must not depend on a tokeniser; it is
 # deliberately conservative.
 MAX_CONTEXT_CHARS = 12_000
+
+# A hard ceiling on the reason/act loop. LangGraph counts every node step, so
+# one tool round is two steps (model + tools); this allows roughly five rounds
+# before giving up. It exists for two reasons: a weak model can get stuck
+# re-querying the same data forever, and every extra round re-sends the whole
+# growing message list, which quickly trips the free tier's per-minute token
+# limit. Bounding the loop bounds both. Hitting it surfaces as a graceful
+# failure rather than minutes of churn.
+RECURSION_LIMIT = 12
 
 
 def build_context(messages: List) -> List[BaseMessage]:
@@ -93,5 +112,7 @@ async def run_agent(thread_id: int, user_id: int) -> AsyncIterator[AgentEvent]:
 
     graph = get_graph()
     callbacks = [ToolCallLogger(thread_id=thread_id, user_id=user_id)]
-    async for event in stream_graph_events(graph, messages, callbacks=callbacks):
+    async for event in stream_graph_events(
+        graph, messages, callbacks=callbacks, recursion_limit=RECURSION_LIMIT
+    ):
         yield event
