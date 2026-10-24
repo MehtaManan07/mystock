@@ -39,6 +39,7 @@ import uuid
 from typing import Any, AsyncIterator, Optional
 
 from langchain_core.runnables import Runnable, RunnableConfig
+from langgraph.errors import GraphRecursionError
 
 from .events import (
     AgentEvent,
@@ -50,6 +51,16 @@ from .events import (
     ToolCallStartEvent,
 )
 from .tools import label_for
+
+# Spoken as a normal assistant reply when the reason/act loop hits its ceiling
+# (RECURSION_LIMIT in agent.py). Reaching the cap is not a crash -- it means the
+# model kept acting without converging -- so the user gets an honest, actionable
+# message instead of a generic error.
+RECURSION_FALLBACK_TEXT = (
+    "I wasn't able to work that out in a few steps. Could you narrow it down a "
+    "little -- for example a single customer, or a shorter date range -- and "
+    "I'll try again?"
+)
 
 
 def _text_of(chunk: Any) -> str:
@@ -94,8 +105,9 @@ async def stream_graph_events(
     the run but never produce ``AgentEvent``s, so the UI contract is untouched.
 
     ``recursion_limit`` caps the reason/act loop. Reaching it raises
-    ``GraphRecursionError``, which the runtime catches and reports as a failed
-    run -- a bounded failure instead of an unbounded one.
+    ``GraphRecursionError``, which is caught here and turned into one honest
+    fallback reply (``RECURSION_FALLBACK_TEXT``) -- a bounded, graceful stop
+    the runtime persists as a normal completed turn, not an error envelope.
     """
     current_message_id: Optional[str] = None
     generating = False
@@ -108,44 +120,59 @@ async def stream_graph_events(
 
     yield RunStatusEvent(status="thinking")
 
-    async for event in graph.astream_events(
-        {"messages": messages}, version="v2", config=config or None
-    ):
-        kind = event["event"]
+    try:
+        async for event in graph.astream_events(
+            {"messages": messages}, version="v2", config=config or None
+        ):
+            kind = event["event"]
 
-        if kind == "on_chat_model_stream":
-            delta = _text_of(event["data"].get("chunk"))
-            if not delta:
-                continue
+            if kind == "on_chat_model_stream":
+                delta = _text_of(event["data"].get("chunk"))
+                if not delta:
+                    continue
 
-            if current_message_id is None:
-                current_message_id = uuid.uuid4().hex
-                if not generating:
-                    generating = True
-                    yield RunStatusEvent(status="generating")
-                yield TextMessageStartEvent(message_id=current_message_id)
+                if current_message_id is None:
+                    current_message_id = uuid.uuid4().hex
+                    if not generating:
+                        generating = True
+                        yield RunStatusEvent(status="generating")
+                    yield TextMessageStartEvent(message_id=current_message_id)
 
-            yield TextMessageContentEvent(
-                message_id=current_message_id, delta=delta
-            )
+                yield TextMessageContentEvent(
+                    message_id=current_message_id, delta=delta
+                )
 
-        elif kind == "on_chat_model_end":
-            # Close this bubble if the turn spoke. A tool-only turn opened no
-            # bubble, so there is nothing to end.
-            if current_message_id is not None:
-                yield TextMessageEndEvent(message_id=current_message_id)
-                current_message_id = None
+            elif kind == "on_chat_model_end":
+                # Close this bubble if the turn spoke. A tool-only turn opened no
+                # bubble, so there is nothing to end.
+                if current_message_id is not None:
+                    yield TextMessageEndEvent(message_id=current_message_id)
+                    current_message_id = None
 
-        elif kind == "on_tool_start":
-            tool_name = event.get("name", "")
-            yield ToolCallStartEvent(
-                tool_call_id=event["run_id"],
-                tool_name=tool_name,
-                label=label_for(tool_name),
-            )
-            # After a tool runs the model will think again before it answers.
-            generating = False
-            yield RunStatusEvent(status="thinking")
+            elif kind == "on_tool_start":
+                tool_name = event.get("name", "")
+                yield ToolCallStartEvent(
+                    tool_call_id=event["run_id"],
+                    tool_name=tool_name,
+                    label=label_for(tool_name),
+                )
+                # After a tool runs the model thinks again before it answers.
+                generating = False
+                yield RunStatusEvent(status="thinking")
 
-        elif kind == "on_tool_end":
-            yield ToolCallEndEvent(tool_call_id=event["run_id"], ok=True)
+            elif kind == "on_tool_end":
+                yield ToolCallEndEvent(tool_call_id=event["run_id"], ok=True)
+
+    except GraphRecursionError:
+        # The reason/act loop hit its ceiling: the model kept acting without
+        # converging. Speak one honest reply instead of erroring out. Close any
+        # half-open bubble first so the fallback is its own clean message.
+        if current_message_id is not None:
+            yield TextMessageEndEvent(message_id=current_message_id)
+        fallback_id = uuid.uuid4().hex
+        yield RunStatusEvent(status="generating")
+        yield TextMessageStartEvent(message_id=fallback_id)
+        yield TextMessageContentEvent(
+            message_id=fallback_id, delta=RECURSION_FALLBACK_TEXT
+        )
+        yield TextMessageEndEvent(message_id=fallback_id)

@@ -36,7 +36,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from langchain_groq import ChatGroq
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -52,13 +52,13 @@ def get_graph() -> CompiledStateGraph:
     Build and cache the compiled agent graph.
 
     Compilation is pure wiring and the bound model is reusable across runs, so
-    there is no reason to pay for it per request. The cache also means the Groq
+    there is no reason to pay for it per request. The cache also means the Gemini
     client is constructed once, after config (and the API key) is loaded.
     """
-    model = ChatGroq(
+    model = ChatGoogleGenerativeAI(
         model=config.assistant_model,
-        api_key=config.assistant_api_key,
-        max_tokens=config.assistant_max_tokens,
+        google_api_key=config.assistant_api_key,
+        max_output_tokens=config.assistant_max_tokens,
         # Deterministic: this answers questions about money from records, so
         # creativity is a liability, not a feature.
         temperature=0,
