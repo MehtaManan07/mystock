@@ -14,11 +14,13 @@ from ._common import derive_title, owned_thread
 from .message import MessageService
 from .run import GENERIC_ERROR_TEXT, RunService
 from .thread import ThreadService
+from .tool_call_log import ToolCallLogService
 
 __all__ = [
     "ThreadService",
     "MessageService",
     "RunService",
+    "ToolCallLogService",
     "GENERIC_ERROR_TEXT",
     "derive_title",
     "owned_thread",

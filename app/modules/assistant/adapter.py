@@ -38,7 +38,7 @@ from __future__ import annotations
 import uuid
 from typing import Any, AsyncIterator, Optional
 
-from langchain_core.runnables import Runnable
+from langchain_core.runnables import Runnable, RunnableConfig
 
 from .events import (
     AgentEvent,
@@ -76,7 +76,7 @@ def _text_of(chunk: Any) -> str:
 
 
 async def stream_graph_events(
-    graph: Runnable, messages: list
+    graph: Runnable, messages: list, callbacks: Optional[list] = None
 ) -> AsyncIterator[AgentEvent]:
     """
     Run the graph and yield our events as the graph works.
@@ -85,13 +85,23 @@ async def stream_graph_events(
     (``run_started`` / ``run_finished`` / errors) belongs to the runtime, which
     wraps this stream -- the adapter is concerned solely with what happens
     *during* the run.
+
+    ``callbacks`` are LangChain run callbacks attached to the whole run (e.g. the
+    tool-call logger). They are a private, server-side concern -- they observe
+    the run but never produce ``AgentEvent``s, so the UI contract is untouched.
     """
     current_message_id: Optional[str] = None
     generating = False
 
+    config: Optional[RunnableConfig] = (
+        {"callbacks": callbacks} if callbacks else None
+    )
+
     yield RunStatusEvent(status="thinking")
 
-    async for event in graph.astream_events({"messages": messages}, version="v2"):
+    async for event in graph.astream_events(
+        {"messages": messages}, version="v2", config=config
+    ):
         kind = event["event"]
 
         if kind == "on_chat_model_stream":

@@ -32,6 +32,7 @@ from .adapter import stream_graph_events
 from .events import AgentEvent
 from .graph import get_graph
 from .models import MessageRole
+from .observability import ToolCallLogger
 from .services import MessageService
 
 logger = logging.getLogger(__name__)
@@ -91,5 +92,6 @@ async def run_agent(thread_id: int, user_id: int) -> AsyncIterator[AgentEvent]:
     messages = build_context(history)
 
     graph = get_graph()
-    async for event in stream_graph_events(graph, messages):
+    callbacks = [ToolCallLogger(thread_id=thread_id, user_id=user_id)]
+    async for event in stream_graph_events(graph, messages, callbacks=callbacks):
         yield event

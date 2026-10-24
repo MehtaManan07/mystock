@@ -44,6 +44,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     ForeignKey,
     Index,
@@ -232,3 +233,53 @@ class AssistantRun(BaseModel):
     @property
     def is_terminal(self) -> bool:
         return self.status in RunStatus.TERMINAL
+
+
+class AssistantToolCall(BaseModel):
+    """
+    One row per tool invocation: a durable, queryable record of how the tools
+    behave in production -- what was called, with what arguments, what it
+    returned, how long it took, and whether it failed.
+
+    This is telemetry, not conversation. Unlike the three tables above it is
+    *not* part of the thread graph: ``thread_id`` / ``user_id`` are plain,
+    unconstrained integers, not foreign keys, so cleaning up a thread never
+    deletes or blocks its performance history. The row answers "how are the
+    tools performing", a question that outlives any single conversation.
+
+    It is also the opposite of the no-persisted-thoughts rule the other tables
+    keep: tool arguments and results are deliberately dropped from the *browser*
+    stream, but kept here for *us*. The two never meet -- the UI reads threads,
+    this table is read by whoever is tuning the agent.
+    """
+
+    __tablename__ = "assistant_tool_calls"
+
+    tool_name: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    # The exact argument dict the model supplied. Small and bounded, so stored
+    # whole -- it is the ground truth of what the model asked for.
+    inputs: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    ok: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    duration_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Results can be large (row dumps), so only their size and a capped preview
+    # are kept -- enough to confirm the shape of an answer without storing the
+    # whole list on every call. Null on failure.
+    output_chars: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    output_preview: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Populated only on failure.
+    error_type: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Plain correlation handles, not foreign keys -- see the class docstring.
+    thread_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    user_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    __table_args__ = (
+        # The shape of every "how is tool X doing over time" query.
+        Index("ix_assistant_tool_calls_name_created", "tool_name", "created_at"),
+        Index("ix_assistant_tool_calls_created", "created_at"),
+    )
