@@ -55,14 +55,26 @@ def get_graph() -> CompiledStateGraph:
     there is no reason to pay for it per request. The cache also means the Gemini
     client is constructed once, after config (and the API key) is loaded.
     """
-    model = ChatGoogleGenerativeAI(
+    # Full Gemini "Flash" models "think" by default, spending the output-token
+    # budget on hidden reasoning before they answer. For a tool-driven lookup
+    # agent that is pure overhead: it starved the visible reply, hit MAX_TOKENS
+    # and returned nothing. ``thinking_budget=0`` turns it off so every token is
+    # answer. "Flash-Lite" models don't think at all and reject the parameter
+    # (400 INVALID_ARGUMENT); they also use fixed sampling and warn that
+    # ``temperature`` is ignored. Both are therefore sent only to the full
+    # models that honour them -- lite is already deterministic for our use.
+    model_kwargs = dict(
         model=config.assistant_model,
         google_api_key=config.assistant_api_key,
         max_output_tokens=config.assistant_max_tokens,
+    )
+    if "lite" not in config.assistant_model.lower():
         # Deterministic: this answers questions about money from records, so
         # creativity is a liability, not a feature.
-        temperature=0,
-    ).bind_tools(TOOLS)
+        model_kwargs["temperature"] = 0
+        model_kwargs["thinking_budget"] = 0
+
+    model = ChatGoogleGenerativeAI(**model_kwargs).bind_tools(TOOLS)
 
     async def call_model(state: MessagesState) -> dict:
         response = await model.ainvoke(state["messages"])

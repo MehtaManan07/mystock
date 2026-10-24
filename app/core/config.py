@@ -29,9 +29,9 @@ class Config(BaseSettings):
     # in graph.py). Override ASSISTANT_MODEL to use a different Gemini variant.
     assistant_api_key: str = Field(default="", alias="ASSISTANT_API_KEY")
     assistant_model: str = Field(
-        default="gemini-flash-latest", alias="ASSISTANT_MODEL"
+        default="gemini-3.5-flash-lite", alias="ASSISTANT_MODEL"
     )
-    assistant_max_tokens: int = Field(default=1024, alias="ASSISTANT_MAX_TOKENS")
+    assistant_max_tokens: int = Field(default=2048, alias="ASSISTANT_MAX_TOKENS")
 
     class Config:
         env_file = ".env"

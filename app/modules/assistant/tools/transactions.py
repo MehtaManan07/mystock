@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 from typing import Optional
 
 from langchain_core.tools import tool
@@ -134,7 +135,37 @@ async def get_transactions(
     total = len(txns)
     shown = txns[:MAX_ROWS]
 
+    # Totals are computed here, over *every* matching transaction, not left to
+    # the model to add up from the rows below. The row list is capped at
+    # MAX_ROWS, so summing it would silently miss the overflow -- and small
+    # models can't reliably add many figures anyway. One trustworthy number
+    # beats thirty rows the model has to total itself.
+    def _totals(items: list) -> tuple[int, Decimal, Decimal]:
+        value = sum((t.total_amount for t in items), Decimal(0))
+        due = sum(((t.total_amount - t.paid_amount) for t in items), Decimal(0))
+        return len(items), value, due
+
+    sales = [t for t in txns if t.type == TransactionType.sale]
+    purchases = [t for t in txns if t.type == TransactionType.purchase]
+
     lines = [f"TRANSACTIONS ({window})"]
+    summary = ["SUMMARY:"]
+    if sales:
+        n, value, due = _totals(sales)
+        summary.append(
+            f"- Sales: {n} txns, {_inr(value)} total"
+            + (f", {_inr(due)} outstanding" if due > 0 else "")
+        )
+    if purchases:
+        n, value, due = _totals(purchases)
+        summary.append(
+            f"- Purchases: {n} txns, {_inr(value)} total"
+            + (f", {_inr(due)} outstanding" if due > 0 else "")
+        )
+    if len(summary) > 1:
+        lines.extend(summary)
+        lines.append("")
+
     for t in shown:
         who = t.contact.name if t.contact else "—"
         outstanding = t.total_amount - t.paid_amount
