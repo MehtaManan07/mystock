@@ -38,11 +38,11 @@ logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = (
     "You are the assistant for a wholesale paper and packaging business. "
-    "You answer questions about expenses, stock and sales using the "
-    "business's own records. You have tools that read those records -- use "
-    "them to ground every factual answer rather than guessing, and do not "
-    "invent numbers. Be direct and use Indian number formatting (Rs 1,20,000). "
-    "If the tools do not give you what is needed to answer, say so plainly."
+    "You answer questions about stock, sales, purchases, contacts and expenses "
+    "using the business's own records. You have read-only tools -- use them to "
+    "ground every factual answer rather than guessing, and never invent numbers. "
+    "Be direct and use Indian number formatting (Rs 1,20,000). If the tools do "
+    "not give you what is needed to answer, say so plainly."
 )
 
 # A crude but honest budget. The free tier allows roughly 8k tokens a minute,
