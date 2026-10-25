@@ -6,9 +6,9 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, Query
 
 from app.modules.users.auth import get_current_user, TokenData
-from .service import DraftsService
-from .schemas import CreateDraftDto, UpdateDraftDto, DraftResponse, CompleteDraftResponse
-from .models import DraftType
+from app.modules.drafts.service import DraftsService
+from app.modules.drafts.schemas import CreateDraftDto, UpdateDraftDto, DraftResponse, CompleteDraftResponse
+from app.modules.drafts.models import DraftType
 
 router = APIRouter(prefix="/drafts", tags=["drafts"])
 

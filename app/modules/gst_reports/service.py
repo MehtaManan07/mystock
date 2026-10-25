@@ -6,10 +6,10 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.db.engine import run_db
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
-from .models import GstReview
-from .reporting import build_report
-from .schemas import AdditionalDocumentInput, GstDocument, ReportRequest, ReviewInput, SourceView
-from .sources import latest_reviews, raw_sources, read_source, seller_gstin, sha, source_view
+from app.modules.gst_reports.models import GstReview
+from app.modules.gst_reports.reporting import build_report
+from app.modules.gst_reports.schemas import AdditionalDocumentInput, GstDocument, ReportRequest, ReviewInput, SourceView
+from app.modules.gst_reports.sources import latest_reviews, raw_sources, read_source, seller_gstin, sha, source_view
 
 
 logger = logging.getLogger(__name__)

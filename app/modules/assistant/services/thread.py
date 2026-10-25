@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.db.engine import run_db
 from app.core.exceptions import NotFoundError
 
-from ..models import DEFAULT_THREAD_TITLE, AssistantThread
-from ._common import derive_title, owned_thread
+from app.modules.assistant.models import DEFAULT_THREAD_TITLE, AssistantThread
+from app.modules.assistant.services._common import derive_title, owned_thread
 
 
 class ThreadService:

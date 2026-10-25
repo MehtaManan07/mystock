@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.db.engine import run_db
 from app.core.pagination import paginate_query, build_paginated_response
 from app.core.exceptions import NotFoundError
-from .models import ContainerType, Container
-from .schemas import CreateContainerDto, CreateContainerBulkDto, UpdateContainerDto
+from app.modules.containers.models import ContainerType, Container
+from app.modules.containers.schemas import CreateContainerDto, CreateContainerBulkDto, UpdateContainerDto
 from app.modules.container_products.models import ContainerProduct
 from app.modules.inventory_logs.models import InventoryLog
 

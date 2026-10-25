@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, model_validator
 from typing import Optional, List
 from datetime import datetime, date
 from decimal import Decimal, ROUND_HALF_UP
-from .models import TransactionType, PaymentStatus, ProductDetailsDisplayMode, TaxType
+from app.modules.transactions.models import TransactionType, PaymentStatus, ProductDetailsDisplayMode, TaxType
 from app.modules.payments.models import PaymentMethod
 
 

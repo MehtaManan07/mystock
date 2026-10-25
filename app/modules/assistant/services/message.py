@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 
 from app.core.db.engine import run_db
 
-from ..models import DEFAULT_THREAD_TITLE, AssistantMessage, MessageRole
-from ._common import derive_title, owned_thread
+from app.modules.assistant.models import DEFAULT_THREAD_TITLE, AssistantMessage, MessageRole
+from app.modules.assistant.services._common import derive_title, owned_thread
 
 
 class MessageService:

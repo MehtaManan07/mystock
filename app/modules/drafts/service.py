@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 
 from app.core.db.engine import run_db
 from app.core.exceptions import NotFoundError
-from .models import Draft, DraftType
-from .schemas import CreateDraftDto, UpdateDraftDto, CompleteDraftResponse, HydratedDraftItem
+from app.modules.drafts.models import Draft, DraftType
+from app.modules.drafts.schemas import CreateDraftDto, UpdateDraftDto, CompleteDraftResponse, HydratedDraftItem
 from app.modules.products.models import Product
 from app.modules.containers.models import Container
 from app.modules.container_products.models import ContainerProduct

@@ -15,9 +15,9 @@ from app.modules.users.auth import (
     require_admin_or_staff,
     require_any_role,
 )
-from .service import TransactionsService
-from .invoice_service import InvoiceService
-from .schemas import (
+from app.modules.transactions.service import TransactionsService
+from app.modules.transactions.invoice_service import InvoiceService
+from app.modules.transactions.schemas import (
     TransactionResponse,
     TransactionListItemResponse,
     CreateSaleDto,
@@ -114,7 +114,7 @@ async def list_transactions(
     Returns paginated transactions ordered by date (newest first).
     """
     from datetime import date as date_type
-    from .models import TransactionType, PaymentStatus
+    from app.modules.transactions.models import TransactionType, PaymentStatus
 
     # Build filters object
     filter_type = TransactionType(type) if type else None

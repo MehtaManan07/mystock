@@ -1,6 +1,6 @@
 """Contacts module"""
 
-from .router import router
+from app.modules.contacts.router import router
 
 __all__ = ["router"]
 

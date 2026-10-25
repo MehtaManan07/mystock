@@ -28,12 +28,12 @@ from typing import AsyncIterator, List
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
-from .adapter import stream_graph_events
-from .events import AgentEvent
-from .graph import get_graph
-from .models import MessageRole
-from .observability import ToolCallLogger
-from .services import MessageService
+from app.modules.assistant.adapter import stream_graph_events
+from app.modules.assistant.events import AgentEvent
+from app.modules.assistant.graph import get_graph
+from app.modules.assistant.models import MessageRole
+from app.modules.assistant.observability import ToolCallLogger
+from app.modules.assistant.services import MessageService
 
 logger = logging.getLogger(__name__)
 

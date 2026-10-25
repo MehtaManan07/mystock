@@ -1,5 +1,5 @@
 """Drafts module - Transaction drafts management"""
 
-from .router import router
+from app.modules.drafts.router import router
 
 __all__ = ["router"]

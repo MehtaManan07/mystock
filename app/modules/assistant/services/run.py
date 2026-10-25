@@ -21,14 +21,14 @@ from sqlalchemy.orm import Session
 from app.core.db.engine import run_db
 from app.core.exceptions import ConflictError, NotFoundError
 
-from ..models import (
+from app.modules.assistant.models import (
     AssistantMessage,
     AssistantRun,
     AssistantThread,
     MessageRole,
     RunStatus,
 )
-from ._common import owned_thread
+from app.modules.assistant.services._common import owned_thread
 
 logger = logging.getLogger(__name__)
 

@@ -1,9 +1,9 @@
 """Users module"""
 
-from .models import Role
-from .service import UsersService
-from .schemas import UpdateUserDto, UserResponse
-from .router import router
+from app.modules.users.models import Role
+from app.modules.users.service import UsersService
+from app.modules.users.schemas import UpdateUserDto, UserResponse
+from app.modules.users.router import router
 
 __all__ = ["Role", "UsersService", "UpdateUserDto", "UserResponse", "router"]
 

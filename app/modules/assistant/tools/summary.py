@@ -9,7 +9,7 @@ from langchain_core.tools import tool
 from app.modules.dashboard.schemas import DashboardPeriod
 from app.modules.dashboard.service import DashboardService
 
-from ._shared import _inr
+from app.modules.assistant.tools._shared import _inr
 
 LABELS = {"get_business_summary": "Pulling up your business summary"}
 

@@ -8,9 +8,9 @@ from fastapi import APIRouter, Depends, Query
 
 from app.core.response_interceptor import skip_interceptor
 from app.modules.users.auth import TokenData, require_any_role
-from .bills import ContactBillsService
-from .service import ContactsService
-from .schemas import ContactBillPage, ContactResponse, CreateContactDto, UpdateContactDto, FilterContactsDto
+from app.modules.contacts.bills import ContactBillsService
+from app.modules.contacts.service import ContactsService
+from app.modules.contacts.schemas import ContactBillPage, ContactResponse, CreateContactDto, UpdateContactDto, FilterContactsDto
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
 

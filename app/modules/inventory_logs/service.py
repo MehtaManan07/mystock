@@ -8,8 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.db.engine import run_db
-from .models import InventoryLog
-from .schemas import CreateInventoryLogDto, CreateInventoryLogBulkDto
+from app.modules.inventory_logs.models import InventoryLog
+from app.modules.inventory_logs.schemas import CreateInventoryLogDto, CreateInventoryLogBulkDto
 
 
 class InventoryLogService:

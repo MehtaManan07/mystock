@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
-from .exceptions import (
+from app.core.exceptions import (
     ValidationError,
     NotFoundError,
     ConflictError,

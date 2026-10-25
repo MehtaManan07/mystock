@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends
 
 from app.modules.users.auth import TokenData, require_any_role
 
-from .service import DashboardService
-from .schemas import DashboardPeriod, DashboardResponse
+from app.modules.dashboard.service import DashboardService
+from app.modules.dashboard.schemas import DashboardPeriod, DashboardResponse
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 

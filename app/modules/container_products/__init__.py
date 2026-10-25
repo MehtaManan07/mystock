@@ -1,6 +1,6 @@
 """Container Products module"""
 
-from .router import router
+from app.modules.container_products.router import router
 
 __all__ = ["router"]
 

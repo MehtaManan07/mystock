@@ -10,11 +10,11 @@ Every unit of work is handed to ``run_db`` so the whole session lifecycle
 stays inside one worker thread.
 """
 
-from ._common import derive_title, owned_thread
-from .message import MessageService
-from .run import GENERIC_ERROR_TEXT, RunService
-from .thread import ThreadService
-from .tool_call_log import ToolCallLogService
+from app.modules.assistant.services._common import derive_title, owned_thread
+from app.modules.assistant.services.message import MessageService
+from app.modules.assistant.services.run import GENERIC_ERROR_TEXT, RunService
+from app.modules.assistant.services.thread import ThreadService
+from app.modules.assistant.services.tool_call_log import ToolCallLogService
 
 __all__ = [
     "ThreadService",

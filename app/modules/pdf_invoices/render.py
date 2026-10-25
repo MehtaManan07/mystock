@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.transactions.invoice_generator import InvoiceGenerator
 from app.modules.transactions.models import ProductDetailsDisplayMode, TaxType
-from .schemas import InvoiceLine, Money, PdfInvoiceMetadata
+from app.modules.pdf_invoices.schemas import InvoiceLine, Money, PdfInvoiceMetadata
 
 
 class GeneratePdfInvoice(BaseModel):

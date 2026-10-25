@@ -43,7 +43,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 
 from app.core.config import config
 
-from .tools import TOOLS
+from app.modules.assistant.tools import TOOLS
 
 
 @lru_cache(maxsize=1)

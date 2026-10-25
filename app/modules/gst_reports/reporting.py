@@ -3,8 +3,8 @@ from decimal import Decimal
 import re
 
 from app.core.exceptions import ValidationError
-from .schemas import GstDocument, Issue, Report, ReportRequest, SalesGroup, SourceView, Totals
-from .sources import money, sha
+from app.modules.gst_reports.schemas import GstDocument, Issue, Report, ReportRequest, SalesGroup, SourceView, Totals
+from app.modules.gst_reports.sources import money, sha
 
 
 STATES = {
@@ -291,7 +291,7 @@ def build_report(request: ReportRequest, seller: str | None, all_views: list[Sou
     )
     if report.exportable:
         # Reuse the actual section builder so reconciliation and export enforce the same restrictions.
-        from .workbook import export_rows
+        from app.modules.gst_reports.workbook import export_rows
         try:
             export_rows(report)
         except ValidationError as exc:

@@ -39,15 +39,15 @@ from typing import AsyncIterator, Callable, Dict, List, Optional, Set, Tuple
 
 from app.core.exceptions import NotFoundError
 
-from .events import (
+from app.modules.assistant.events import (
     AgentEvent,
     RunErrorEvent,
     RunFinishedEvent,
     RunStartedEvent,
     is_ephemeral,
 )
-from .models import RunStatus
-from .services import GENERIC_ERROR_TEXT, MessageService, RunService, ThreadService
+from app.modules.assistant.models import RunStatus
+from app.modules.assistant.services import GENERIC_ERROR_TEXT, MessageService, RunService, ThreadService
 
 logger = logging.getLogger(__name__)
 
@@ -398,7 +398,7 @@ async def start_turn(
     If recording the message then fails, the run is closed rather than left
     holding the thread open forever.
     """
-    from .agent import run_agent
+    from app.modules.assistant.agent import run_agent
 
     if thread_id is None:
         thread = await ThreadService.create(user_id)

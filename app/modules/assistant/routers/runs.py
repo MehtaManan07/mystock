@@ -34,10 +34,10 @@ from fastapi.responses import StreamingResponse
 from app.core.response_interceptor import skip_interceptor
 from app.modules.users.auth import TokenData, get_current_user
 
-from ..events import format_heartbeat, format_sse
-from ..runtime import run_registry
-from ..schemas import RunResponse
-from ..services import RunService
+from app.modules.assistant.events import format_heartbeat, format_sse
+from app.modules.assistant.runtime import run_registry
+from app.modules.assistant.schemas import RunResponse
+from app.modules.assistant.services import RunService
 
 logger = logging.getLogger(__name__)
 

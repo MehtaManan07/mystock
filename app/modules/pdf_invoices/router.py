@@ -6,11 +6,11 @@ from pydantic import ValidationError as SchemaError
 
 from app.core.exceptions import ValidationError
 from app.modules.users.auth import TokenData, require_admin_or_staff, require_any_role
-from .schemas import (
+from app.modules.pdf_invoices.schemas import (
     PdfInvoiceMetadata, PdfInvoiceNumberResponse, PdfInvoicePage, PdfInvoiceResponse,
     ReservePdfInvoiceNumber,
 )
-from .service import MAX_PDF_BYTES, PdfInvoiceService
+from app.modules.pdf_invoices.service import MAX_PDF_BYTES, PdfInvoiceService
 
 
 router = APIRouter(prefix="/pdf-invoices", tags=["pdf-invoices"])

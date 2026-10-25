@@ -20,7 +20,7 @@ from sqlalchemy import select
 from app.core.db.engine import run_db
 from app.core.invoice_filenames import invoice_filename
 from app.core.storage import StorageService
-from .invoice_generator import InvoiceGenerator
+from app.modules.transactions.invoice_generator import InvoiceGenerator
 from app.core.config import config
 from app.core.exceptions import NotFoundError, ValidationError
 from app.modules.transactions.models import Transaction, TransactionItem

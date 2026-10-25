@@ -41,7 +41,7 @@ from typing import Any, AsyncIterator, Optional
 from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.errors import GraphRecursionError
 
-from .events import (
+from app.modules.assistant.events import (
     AgentEvent,
     RunStatusEvent,
     TextMessageContentEvent,
@@ -50,7 +50,7 @@ from .events import (
     ToolCallEndEvent,
     ToolCallStartEvent,
 )
-from .tools import label_for
+from app.modules.assistant.tools import label_for
 
 # Spoken as a normal assistant reply when the reason/act loop hits its ceiling
 # (RECURSION_LIMIT in agent.py). Reaching the cap is not a crash -- it means the

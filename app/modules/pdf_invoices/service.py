@@ -19,8 +19,8 @@ from app.core.exceptions import ConflictError, ExternalServiceError, NotFoundErr
 from app.core.storage import ImmutableObjectConflictError, StorageService
 from app.modules.contacts.models import Contact, ContactType
 from app.modules.transactions.models import Transaction
-from .models import PdfInvoice, PdfInvoiceNumberReservation
-from .schemas import (
+from app.modules.pdf_invoices.models import PdfInvoice, PdfInvoiceNumberReservation
+from app.modules.pdf_invoices.schemas import (
     PdfInvoiceMetadata, PdfInvoiceNumberResponse, PdfInvoicePage, PdfInvoiceResponse,
     ReservePdfInvoiceNumber, financial_year,
 )

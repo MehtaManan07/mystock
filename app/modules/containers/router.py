@@ -7,8 +7,8 @@ from typing import List, Optional
 from fastapi import APIRouter, Query
 
 from app.core.response_interceptor import skip_interceptor
-from .service import ContainerService
-from .schemas import (
+from app.modules.containers.service import ContainerService
+from app.modules.containers.schemas import (
     CreateContainerDto,
     CreateContainerBulkDto,
     UpdateContainerDto,

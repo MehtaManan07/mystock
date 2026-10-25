@@ -5,8 +5,8 @@ InventoryLog Router - API endpoints for inventory log management.
 from typing import List
 from fastapi import APIRouter
 
-from .service import InventoryLogService
-from .schemas import (
+from app.modules.inventory_logs.service import InventoryLogService
+from app.modules.inventory_logs.schemas import (
     CreateInventoryLogDto,
     CreateInventoryLogBulkDto,
     InventoryLogResponse,

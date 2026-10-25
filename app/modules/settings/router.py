@@ -3,8 +3,8 @@
 from fastapi import APIRouter, Depends
 
 from app.modules.users.auth import TokenData, require_admin, require_any_role
-from .service import SettingsService
-from .schemas import CompanySettingsResponse, UpdateCompanySettingsDto
+from app.modules.settings.service import SettingsService
+from app.modules.settings.schemas import CompanySettingsResponse, UpdateCompanySettingsDto
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 

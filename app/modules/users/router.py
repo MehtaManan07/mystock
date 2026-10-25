@@ -7,8 +7,8 @@ from typing import List
 from fastapi import APIRouter, Depends, Query
 
 from app.core.response_interceptor import skip_interceptor
-from .service import UsersService
-from .schemas import (
+from app.modules.users.service import UsersService
+from app.modules.users.schemas import (
     LoginRequest,
     LoginResponse,
     RegisterRequest,
@@ -17,8 +17,8 @@ from .schemas import (
     UserResponse,
     UpdateUserDto,
 )
-from .models import Role
-from .auth import (
+from app.modules.users.models import Role
+from app.modules.users.auth import (
     get_current_user,
     TokenData,
     require_admin,

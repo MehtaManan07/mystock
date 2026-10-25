@@ -3,9 +3,9 @@ import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Path, Response
 
 from app.modules.users.auth import TokenData, require_admin_or_staff
-from .schemas import AdditionalDocumentInput, ExportRequest, Report, ReportRequest, ReviewInput, SourceKind, SourceView
-from .service import GstReportingService
-from .workbook import generate_workbook
+from app.modules.gst_reports.schemas import AdditionalDocumentInput, ExportRequest, Report, ReportRequest, ReviewInput, SourceKind, SourceView
+from app.modules.gst_reports.service import GstReportingService
+from app.modules.gst_reports.workbook import generate_workbook
 
 
 router = APIRouter(prefix="/gst-reports", tags=["gst-reports"])

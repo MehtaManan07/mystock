@@ -14,7 +14,7 @@ from app.modules.containers.models import Container
 from app.modules.payments.models import Payment
 from app.modules.products.models import Product
 from app.modules.transactions.models import Transaction, TransactionItem
-from .schemas import (
+from app.modules.dashboard.schemas import (
     DashboardBalances,
     DashboardBestSeller,
     DashboardBill,

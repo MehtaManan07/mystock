@@ -5,7 +5,7 @@ User DTOs (Data Transfer Objects) - equivalent to NestJS DTOs
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
-from .models import Role
+from app.modules.users.models import Role
 
 
 class UpdateUserDto(BaseModel):

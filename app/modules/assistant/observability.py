@@ -188,7 +188,7 @@ class ToolCallLogger(AsyncCallbackHandler):
         a database, and so importing it never triggers engine construction. The
         service itself swallows write failures -- telemetry never breaks a run.
         """
-        from .services import ToolCallLogService
+        from app.modules.assistant.services import ToolCallLogService
 
         await ToolCallLogService.record(
             thread_id=self._thread_id, user_id=self._user_id, **fields

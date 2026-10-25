@@ -8,8 +8,8 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 
 from app.core.exceptions import ValidationError
-from .reporting import STATES, UQC_LABELS, series_rows
-from .schemas import Report
+from app.modules.gst_reports.reporting import STATES, UQC_LABELS, series_rows
+from app.modules.gst_reports.schemas import Report
 
 
 # Header names/order follow the supplied TallyPrime May-2025+ export.

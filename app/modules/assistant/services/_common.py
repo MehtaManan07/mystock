@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import NotFoundError
 
-from ..models import DEFAULT_THREAD_TITLE, MAX_TITLE_LENGTH, AssistantThread
+from app.modules.assistant.models import DEFAULT_THREAD_TITLE, MAX_TITLE_LENGTH, AssistantThread
 
 
 def derive_title(text: str) -> str:

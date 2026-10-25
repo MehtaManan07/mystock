@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.db.engine import run_db
 from app.core.invoice_numbers import next_sale_number
 from app.core.exceptions import ValidationError, NotFoundError
-from .models import (
+from app.modules.transactions.models import (
     Transaction,
     TransactionItem,
     TransactionType,
@@ -22,7 +22,7 @@ from .models import (
     TaxType,
 )
 from app.modules.payments.models import Payment, PaymentMethod
-from .schemas import (
+from app.modules.transactions.schemas import (
     CreateSaleDto,
     CreatePurchaseDto,
     CreatePaymentDto,
@@ -39,7 +39,7 @@ from app.modules.pdf_invoices.models import PdfInvoice
 
 
 # Import invoice service for background invoice generation
-from .invoice_service import InvoiceService
+from app.modules.transactions.invoice_service import InvoiceService
 
 
 class TransactionsService:

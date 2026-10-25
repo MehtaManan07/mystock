@@ -1,5 +1,5 @@
 """Inventory Logs module"""
 
-from .router import router
+from app.modules.inventory_logs.router import router
 
 __all__ = ["router"]

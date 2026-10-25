@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session
 from app.core.db.engine import run_db
 from app.core.exceptions import ConflictError, NotFoundError, UnauthorizedError
 from app.modules.users.auth import AuthService
-from .models import Role, User
-from .schemas import (
+from app.modules.users.models import Role, User
+from app.modules.users.schemas import (
     LoginRequest,
     LoginResponse,
     TokenResponse,

@@ -5,7 +5,7 @@ Drafts DTOs (Data Transfer Objects)
 from pydantic import BaseModel, Field
 from typing import Optional, Any, Dict, List
 from datetime import datetime
-from .models import DraftType
+from app.modules.drafts.models import DraftType
 from app.modules.products.schemas import ProductResponse
 from app.modules.containers.schemas import ContainerResponse
 

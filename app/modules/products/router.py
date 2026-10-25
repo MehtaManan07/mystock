@@ -7,8 +7,8 @@ from typing import List, Optional
 from fastapi import APIRouter, File, Query, UploadFile
 
 from app.core.response_interceptor import skip_interceptor
-from .service import ProductService
-from .schemas import (
+from app.modules.products.service import ProductService
+from app.modules.products.schemas import (
     CreateProductDto,
     CreateProductBulkDto,
     UpdateProductDto,

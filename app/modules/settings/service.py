@@ -6,8 +6,8 @@ from sqlalchemy import select
 
 from app.core.db.engine import run_db
 from app.core.exceptions import NotFoundError
-from .models import CompanySettings
-from .schemas import UpdateCompanySettingsDto
+from app.modules.settings.models import CompanySettings
+from app.modules.settings.schemas import UpdateCompanySettingsDto
 
 
 class SettingsService:

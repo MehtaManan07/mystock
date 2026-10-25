@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Literal
 from datetime import date, datetime
 from decimal import Decimal
-from .models import ContactType
+from app.modules.contacts.models import ContactType
 
 
 class FilterContactsDto(BaseModel):

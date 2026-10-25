@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Literal
 from datetime import datetime, date
 from decimal import Decimal
-from .models import PaymentMethod, SUGGESTED_PAYMENT_CATEGORIES
+from app.modules.payments.models import PaymentMethod, SUGGESTED_PAYMENT_CATEGORIES
 
 
 # Request DTOs

@@ -37,7 +37,7 @@ from typing import Annotated, Literal, Mapping, Optional, Union, get_args
 
 from pydantic import BaseModel, Field
 
-from .widgets import Widget
+from app.modules.assistant.widgets import Widget
 
 
 def _now() -> datetime:

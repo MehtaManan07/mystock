@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends
 
 from app.modules.users.auth import TokenData, get_current_user
 
-from ..runtime import start_turn
-from ..schemas import MessageResponse, SendMessageDto, SendMessageResponse
+from app.modules.assistant.runtime import start_turn
+from app.modules.assistant.schemas import MessageResponse, SendMessageDto, SendMessageResponse
 
 router = APIRouter(prefix="/messages", tags=["assistant"])
 

@@ -6,8 +6,8 @@ from app.core.exceptions import NotFoundError
 from app.core.invoice_filenames import invoice_filename
 from app.modules.pdf_invoices.models import PdfInvoice
 from app.modules.transactions.models import Transaction
-from .models import Contact
-from .schemas import ContactBill, ContactBillPage
+from app.modules.contacts.models import Contact
+from app.modules.contacts.schemas import ContactBill, ContactBillPage
 
 
 class ContactBillsService:

@@ -9,7 +9,7 @@ from langchain_core.tools import tool
 
 from app.modules.payments.service import PaymentsService
 
-from ._shared import MAX_ROWS, _inr, _period_start
+from app.modules.assistant.tools._shared import MAX_ROWS, _inr, _period_start
 
 LABELS = {"get_expense_summary": "Adding up expenses"}
 

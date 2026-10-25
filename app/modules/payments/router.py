@@ -15,9 +15,9 @@ from app.modules.users.auth import (
     require_admin_or_manager,
     require_any_role,
 )
-from .service import PaymentsService
-from .models import SUGGESTED_PAYMENT_CATEGORIES, INCOME_CATEGORIES
-from .schemas import (
+from app.modules.payments.service import PaymentsService
+from app.modules.payments.models import SUGGESTED_PAYMENT_CATEGORIES, INCOME_CATEGORIES
+from app.modules.payments.schemas import (
     ManualPaymentResponse,
     ManualPaymentListItemResponse,
     CreateManualPaymentDto,

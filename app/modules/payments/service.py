@@ -13,8 +13,8 @@ from sqlalchemy.orm import Session
 from app.core.db.engine import run_db
 from app.core.exceptions import NotFoundError, ValidationError
 from app.core.pagination import paginate_query, build_paginated_response
-from .models import Payment, SUGGESTED_PAYMENT_CATEGORIES
-from .schemas import CreateManualPaymentDto, UpdateManualPaymentDto, FilterManualPaymentsDto, PaymentSummaryResponse
+from app.modules.payments.models import Payment, SUGGESTED_PAYMENT_CATEGORIES
+from app.modules.payments.schemas import CreateManualPaymentDto, UpdateManualPaymentDto, FilterManualPaymentsDto, PaymentSummaryResponse
 
 
 class PaymentsService:

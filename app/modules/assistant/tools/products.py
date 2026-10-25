@@ -8,7 +8,7 @@ from langchain_core.tools import tool
 
 from app.modules.products.service import ProductService
 
-from ._shared import LOW_STOCK_THRESHOLD, MAX_ROWS, _inr, _truncation_note
+from app.modules.assistant.tools._shared import LOW_STOCK_THRESHOLD, MAX_ROWS, _inr, _truncation_note
 
 LABELS = {"find_products": "Looking up products and stock"}
 

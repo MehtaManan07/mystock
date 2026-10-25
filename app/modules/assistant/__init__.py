@@ -21,6 +21,6 @@ Layout:
     routers/     HTTP, split by resource; combined under /assistant
 """
 
-from .routers import router
+from app.modules.assistant.routers import router
 
 __all__ = ["router"]

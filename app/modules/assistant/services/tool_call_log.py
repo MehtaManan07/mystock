@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db.engine import run_db
 
-from ..models import AssistantToolCall
+from app.modules.assistant.models import AssistantToolCall
 
 logger = logging.getLogger("assistant.tools")
 

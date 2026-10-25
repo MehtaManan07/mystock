@@ -13,8 +13,8 @@ from app.modules.pdf_invoices.models import PdfInvoice
 from app.modules.products.models import Product
 from app.modules.settings.models import CompanySettings
 from app.modules.transactions.models import Transaction, TransactionItem
-from .models import GstReview
-from .schemas import GstDocument, GstLine, RateTax, SourceView
+from app.modules.gst_reports.models import GstReview
+from app.modules.gst_reports.schemas import GstDocument, GstLine, RateTax, SourceView
 
 
 CENT = Decimal("0.01")

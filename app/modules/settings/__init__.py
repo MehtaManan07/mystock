@@ -1,6 +1,6 @@
 """Settings module for company configuration"""
 
-from .router import router
+from app.modules.settings.router import router
 
 __all__ = ["router"]
 

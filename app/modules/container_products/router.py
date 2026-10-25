@@ -7,8 +7,8 @@ from typing import List
 from fastapi import APIRouter, Query
 
 from app.core.response_interceptor import skip_interceptor
-from .service import ContainerProductService
-from .schemas import (
+from app.modules.container_products.service import ContainerProductService
+from app.modules.container_products.schemas import (
     CreateContainerProductDto,
     ContainerProductResponse,
     TotalQuantityResponse,

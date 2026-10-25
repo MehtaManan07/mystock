@@ -8,8 +8,8 @@ from fastapi import APIRouter, Depends
 
 from app.modules.users.auth import TokenData, get_current_user
 
-from ..schemas import CreateThreadDto, RenameThreadDto, ThreadDetail, ThreadSummary
-from ..services import ThreadService
+from app.modules.assistant.schemas import CreateThreadDto, RenameThreadDto, ThreadDetail, ThreadSummary
+from app.modules.assistant.services import ThreadService
 
 router = APIRouter(prefix="/threads", tags=["assistant"])
 
