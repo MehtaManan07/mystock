@@ -6,12 +6,36 @@ from typing import Optional
 
 from langchain_core.tools import tool
 
+from app.modules.contacts.models import Contact
 from app.modules.contacts.schemas import FilterContactsDto
 from app.modules.contacts.service import ContactsService
 
-from ._shared import MAX_ROWS, _inr, _truncation_note
+from app.modules.assistant.tools._shared import MAX_ROWS, _inr, _truncation_note
 
 LABELS = {"find_contacts": "Looking up contacts and balances"}
+
+
+async def resolve_contact(name: str) -> tuple[Optional[Contact], Optional[str]]:
+    """Resolve a free-text contact name to exactly one contact.
+
+    Returns ``(contact, None)`` on a unique match. When nothing matches, or the
+    name is ambiguous, returns ``(None, message)`` -- the message is written for
+    the model to relay or act on (it lists the choices so the model can ask
+    which one is meant). Tools that take a ``contact_name`` share this so "one
+    name, many contacts" behaves identically everywhere.
+    """
+    matches = await ContactsService.find_all(
+        FilterContactsDto(search=name, balance=None)
+    )
+    if not matches:
+        return None, f'No contact found matching "{name}".'
+    if len(matches) > 1:
+        names = ", ".join(f"{c.name} ({c.type.value})" for c in matches[:MAX_ROWS])
+        return None, (
+            f'"{name}" matches several contacts: {names}. '
+            "Ask which one is meant, then use the exact name."
+        )
+    return matches[0], None
 
 
 @tool

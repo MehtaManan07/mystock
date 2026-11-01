@@ -8,13 +8,12 @@ from typing import Optional
 
 from langchain_core.tools import tool
 
-from app.modules.contacts.schemas import FilterContactsDto
-from app.modules.contacts.service import ContactsService
 from app.modules.transactions.models import PaymentStatus, TransactionType
 from app.modules.transactions.schemas import TransactionFilterDto
 from app.modules.transactions.service import TransactionsService
 
-from ._shared import MAX_ROWS, _inr, _period_start, _truncation_note
+from app.modules.assistant.tools._shared import MAX_ROWS, _inr, _period_start, _truncation_note
+from app.modules.assistant.tools.contacts import resolve_contact
 
 LABELS = {"get_transactions": "Checking recent transactions"}
 
@@ -50,18 +49,10 @@ async def get_transactions(
     """
     contact_id: Optional[int] = None
     if contact_name:
-        matches = await ContactsService.find_all(
-            FilterContactsDto(search=contact_name, balance=None)
-        )
-        if not matches:
-            return f'No contact found matching "{contact_name}".'
-        if len(matches) > 1:
-            names = ", ".join(f"{c.name} ({c.type.value})" for c in matches[:MAX_ROWS])
-            return (
-                f'"{contact_name}" matches several contacts: {names}. '
-                "Ask which one is meant, then search by the exact name."
-            )
-        contact_id = matches[0].id
+        contact, problem = await resolve_contact(contact_name)
+        if problem:
+            return problem
+        contact_id = contact.id
 
     txn_type: Optional[TransactionType] = None
     if kind:
