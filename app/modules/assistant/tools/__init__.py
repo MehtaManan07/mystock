@@ -31,16 +31,26 @@ changes. ``graph.py`` imports ``TOOLS``; ``adapter.py`` imports ``label_for``.
 
 from __future__ import annotations
 
-from app.modules.assistant.tools import bills, contacts, expenses, ledger, products, summary, transactions
+from app.modules.assistant.tools import (
+    bills,
+    contacts,
+    expenses,
+    ledger,
+    product_buyers,
+    products,
+    summary,
+    transactions,
+)
 
 # Every domain module that contributes tools. Add a module here (and it must
 # expose a tool callable + a LABELS dict) and its tools light up everywhere.
-_MODULES = [summary, products, contacts, transactions, bills, ledger, expenses]
+_MODULES = [summary, products, product_buyers, contacts, transactions, bills, ledger, expenses]
 
 # The tools the agent may call. Order is the order the model sees them in.
 TOOLS = [
     summary.get_business_summary,
     products.find_products,
+    product_buyers.get_product_buyers,
     contacts.find_contacts,
     transactions.get_transactions,
     bills.find_bills,

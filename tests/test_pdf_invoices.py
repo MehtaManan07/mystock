@@ -86,6 +86,30 @@ class MetadataTests(unittest.TestCase):
             with self.subTest(quantity=quantity), self.assertRaises(SchemaError):
                 InvoiceLine(**{**line, "quantity": quantity})
 
+    def test_uploaded_bills_tolerate_rupee_rounded_gst_components(self):
+        # External accounting software rounds each printed GST component to the
+        # nearest rupee: 5500 x 5% = 275.00 exact, halved to 137.50, printed as
+        # 138 + 138 = 276. Uploaded bills keep their snapshots; generated ones
+        # must still agree to the paisa.
+        line = dict(name="Thali", quantity=100, unit_price="55", tax_rate="5")
+        printed = dict(subtotal="5500", igst="0", cgst="138", sgst="138",
+                       total_amount="5776", line_items=[line])
+        self.assertEqual(metadata(**printed).tax_tolerance, Decimal("1.00"))
+        with self.assertRaises(SchemaError):
+            metadata(source="generated", **printed)
+
+        igst_only = dict(subtotal="5500", igst="275", total_amount="5775", line_items=[line])
+        self.assertEqual(metadata(**igst_only).tax_tolerance, Decimal("0.50"))
+
+        beyond = [
+            dict(printed, cgst="139", sgst="139", total_amount="5778"),
+            dict(igst_only, igst="276", total_amount="5776"),
+            dict(printed, subtotal="5000", total_amount="5276"),
+        ]
+        for values in beyond:
+            with self.subTest(values=values), self.assertRaises(SchemaError):
+                metadata(**values)
+
     def test_financial_year_changes_on_april_first(self):
         self.assertEqual(financial_year(date(2026, 3, 31)), "2025-2026")
         self.assertEqual(financial_year(date(2026, 4, 1)), "2026-2027")

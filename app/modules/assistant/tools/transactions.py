@@ -14,11 +14,12 @@ from app.modules.transactions.service import TransactionsService
 
 from app.modules.assistant.tools._shared import MAX_ROWS, _inr, _period_start, _truncation_note
 from app.modules.assistant.tools.contacts import resolve_contact
+from app.modules.assistant.widgets import TableCell, TableColumn, TableWidget
 
 LABELS = {"get_transactions": "Checking recent transactions"}
 
 
-@tool
+@tool(response_format="content_and_artifact")
 async def get_transactions(
     days: Optional[int] = 30,
     contact_name: Optional[str] = None,
@@ -27,7 +28,7 @@ async def get_transactions(
     search: Optional[str] = None,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
-) -> str:
+) -> tuple[str, Optional[dict]]:
     """List recent sales and purchases, optionally filtered.
 
     Args:
@@ -46,12 +47,16 @@ async def get_transactions(
     Use for "what did we sell this week", "unpaid bills", "purchases in
     September", or one contact's recent transactions. For a running total or
     net position, use get_business_summary instead.
+
+    The transactions are shown to the user as a table; you receive only a
+    one-line summary with the headline totals, so lead with those in a sentence
+    and do not re-list the rows.
     """
     contact_id: Optional[int] = None
     if contact_name:
         contact, problem = await resolve_contact(contact_name)
         if problem:
-            return problem
+            return problem, None
         contact_id = contact.id
 
     txn_type: Optional[TransactionType] = None
@@ -80,7 +85,8 @@ async def get_transactions(
         else:
             return (
                 f'I don\'t recognise payment status "{payment_status}". '
-                "Use paid, unpaid, partial, or outstanding."
+                "Use paid, unpaid, partial, or outstanding.",
+                None,
             )
 
     explicit = bool(from_date or to_date)
@@ -90,12 +96,12 @@ async def get_transactions(
         try:
             from_bound = date.fromisoformat(from_date.strip())
         except ValueError:
-            return f'Could not read the start date "{from_date}". Use YYYY-MM-DD.'
+            return f'Could not read the start date "{from_date}". Use YYYY-MM-DD.', None
     if to_date:
         try:
             to_bound = date.fromisoformat(to_date.strip())
         except ValueError:
-            return f'Could not read the end date "{to_date}". Use YYYY-MM-DD.'
+            return f'Could not read the end date "{to_date}". Use YYYY-MM-DD.', None
 
     filters = TransactionFilterDto(
         type=txn_type,
@@ -120,17 +126,17 @@ async def get_transactions(
         window = "all time"
 
     if not txns:
-        return f"No transactions found for {window}."
+        return f"No transactions found for {window}.", None
 
     txns.sort(key=lambda t: t.transaction_date, reverse=True)
     total = len(txns)
     shown = txns[:MAX_ROWS]
 
     # Totals are computed here, over *every* matching transaction, not left to
-    # the model to add up from the rows below. The row list is capped at
-    # MAX_ROWS, so summing it would silently miss the overflow -- and small
-    # models can't reliably add many figures anyway. One trustworthy number
-    # beats thirty rows the model has to total itself.
+    # the model to add up from the rows. The row list is capped at MAX_ROWS, so
+    # summing it would silently miss the overflow -- and small models can't
+    # reliably add many figures anyway. One trustworthy number beats thirty rows
+    # the model has to total itself.
     def _totals(items: list) -> tuple[int, Decimal, Decimal]:
         value = sum((t.total_amount for t in items), Decimal(0))
         due = sum(((t.total_amount - t.paid_amount) for t in items), Decimal(0))
@@ -139,39 +145,54 @@ async def get_transactions(
     sales = [t for t in txns if t.type == TransactionType.sale]
     purchases = [t for t in txns if t.type == TransactionType.purchase]
 
-    lines = [f"TRANSACTIONS ({window})"]
-    summary = ["SUMMARY:"]
+    headline_parts: list[str] = []
     if sales:
         n, value, due = _totals(sales)
-        summary.append(
-            f"- Sales: {n} txns, {_inr(value)} total"
-            + (f", {_inr(due)} outstanding" if due > 0 else "")
+        headline_parts.append(
+            f"Sales: {n} txns, {_inr(value)}"
+            + (f" ({_inr(due)} due)" if due > 0 else "")
         )
     if purchases:
         n, value, due = _totals(purchases)
-        summary.append(
-            f"- Purchases: {n} txns, {_inr(value)} total"
-            + (f", {_inr(due)} outstanding" if due > 0 else "")
+        headline_parts.append(
+            f"Purchases: {n} txns, {_inr(value)}"
+            + (f" ({_inr(due)} due)" if due > 0 else "")
         )
-    if len(summary) > 1:
-        lines.extend(summary)
-        lines.append("")
+    headline = " \u00b7 ".join(headline_parts) if headline_parts else f"{total} txns"
 
-    for t in shown:
-        who = t.contact.name if t.contact else "—"
+    def _status_cell(t) -> str:
         outstanding = t.total_amount - t.paid_amount
-        tail = (
-            f"{t.payment_status.value}"
-            if outstanding <= 0
-            else f"{t.payment_status.value}, {_inr(outstanding)} due"
-        )
-        lines.append(
-            f"- {t.transaction_date.isoformat()} | {t.transaction_number} | "
-            f"{t.type.value} | {who} | {_inr(t.total_amount)} | {tail}"
-        )
+        if outstanding <= 0:
+            return t.payment_status.value
+        return f"{t.payment_status.value}, {_inr(outstanding)} due"
 
-    note = _truncation_note(total, len(shown))
-    if note:
-        lines.append(note)
+    widget = TableWidget(
+        title=f"Transactions ({window})",
+        summary=headline,
+        columns=[
+            TableColumn(label="Date"),
+            TableColumn(label="Bill"),
+            TableColumn(label="Type"),
+            TableColumn(label="Contact"),
+            TableColumn(label="Amount", align="right"),
+            TableColumn(label="Status"),
+        ],
+        rows=[
+            [
+                TableCell(text=t.transaction_date.isoformat()),
+                TableCell(text=t.transaction_number, href=f"/transactions/{t.id}"),
+                TableCell(text=t.type.value),
+                TableCell(text=t.contact.name if t.contact else "\u2014"),
+                TableCell(text=_inr(t.total_amount)),
+                TableCell(text=_status_cell(t)),
+            ]
+            for t in shown
+        ],
+        truncation_note=_truncation_note(total, len(shown)) or None,
+    )
 
-    return "\n".join(lines)
+    content = (
+        f"Displayed a table of {total} transaction(s) for {window}. "
+        f"{headline}. Lead with those totals in one sentence; do not re-list rows."
+    )
+    return content, widget.model_dump()

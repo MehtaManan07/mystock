@@ -355,3 +355,13 @@ class InvoiceMetadataResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class ProductBuyerSummary(BaseModel):
+    """One customer's total purchases of a single product, for ranking buyers."""
+
+    contact_id: int
+    contact_name: str
+    quantity: int = Field(..., description="Total units of the product this customer bought")
+    amount: Decimal = Field(..., description="Total line value (pre-tax) across those purchases")
+    transaction_count: int = Field(..., description="How many sale transactions included the product")

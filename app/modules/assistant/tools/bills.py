@@ -27,6 +27,7 @@ from app.modules.transactions.service import TransactionsService
 
 from app.modules.assistant.tools._shared import MAX_ROWS, _inr, _period_start, _truncation_note
 from app.modules.assistant.tools.contacts import resolve_contact
+from app.modules.assistant.widgets import TableCell, TableColumn, TableWidget
 
 LABELS = {"find_bills": "Gathering bills"}
 
@@ -43,6 +44,12 @@ class _Bill:
     customer: str
     total: Decimal
     source: str
+    # In-app link to the bill, opened in a new tab by the chat's markdown
+    # renderer. Sales deep-link to the transaction page; archived PDFs open
+    # their preview on the PDF Bills page. Both routes are bearer-authed in the
+    # SPA, so we never link straight at a PDF endpoint (that would 401 in a new
+    # tab). May be empty if a bill has no viewable page.
+    href: str
 
 
 def _sort_key(number: str) -> int:
@@ -51,12 +58,12 @@ def _sort_key(number: str) -> int:
     return int(match.group(1)) if match else 0
 
 
-@tool
+@tool(response_format="content_and_artifact")
 async def find_bills(
     customer: str,
     days: Optional[int] = None,
     source: Optional[str] = None,
-) -> str:
+) -> tuple[str, Optional[dict]]:
     """List every bill for one customer -- both sales and archived PDF invoices.
 
     Args:
@@ -69,10 +76,14 @@ async def find_bills(
     Use for "give me all of X's bills", "show Dabster's invoices", or "which
     bills did we raise for X this month". For totals/running balance use
     get_business_summary; for payment status detail use get_transactions.
+
+    The itemised bills are shown to the user directly as a table (with links);
+    you receive only a one-line summary, so lead with a short sentence and do
+    not try to re-list the rows.
     """
     contact, problem = await resolve_contact(customer)
     if problem:
-        return problem
+        return problem, None
     assert contact is not None  # resolve_contact returns one when problem is None
 
     want = source.strip().lower() if source else None
@@ -83,7 +94,8 @@ async def find_bills(
     elif want is not None:
         return (
             f'I don\'t recognise source "{source}". '
-            "Use sale, pdf, or omit it for both."
+            "Use sale, pdf, or omit it for both.",
+            None,
         )
 
     from_bound = _period_start(days)
@@ -109,6 +121,7 @@ async def find_bills(
                     customer=t.contact.name if t.contact else contact.name,
                     total=t.total_amount,
                     source="sale",
+                    href=f"/transactions/{t.id}",
                 )
             )
 
@@ -130,31 +143,47 @@ async def find_bills(
                     customer=inv.customer_name,
                     total=inv.total_amount,
                     source="archived PDF",
+                    href=f"/pdf-invoices?preview={inv.id}",
                 )
             )
 
     window = f"last {days} days" if days else "all time"
     if not bills:
-        return f"No bills found for {contact.name} ({window})."
+        return f"No bills found for {contact.name} ({window}).", None
 
     bills.sort(key=lambda b: _sort_key(b.number), reverse=True)
     total = len(bills)
     shown = bills[:MAX_ROWS]
-
     grand = sum((b.total for b in bills), Decimal(0))
-    lines = [
-        f"BILLS for {contact.name} ({window})",
-        f"SUMMARY: {total} bills, {_inr(grand)} total",
-        "",
-    ]
-    for b in shown:
-        lines.append(
-            f"- {b.number} | {b.on.isoformat()} | {b.customer} | "
-            f"{_inr(b.total)} | {b.source}"
-        )
 
-    note = _truncation_note(total, len(shown))
-    if note:
-        lines.append(note)
+    # The authoritative table the user sees. Its rows never reach the model --
+    # they ride on the tool artifact and React draws them verbatim, so the
+    # numbers and links cannot be miscounted, restyled or dropped.
+    widget = TableWidget(
+        title=f"Bills for {contact.name} ({window})",
+        summary=f"{total} bills \u00b7 {_inr(grand)} total",
+        columns=[
+            TableColumn(label="Bill"),
+            TableColumn(label="Date"),
+            TableColumn(label="Amount", align="right"),
+            TableColumn(label="Source"),
+        ],
+        rows=[
+            [
+                TableCell(text=b.number, href=b.href or None),
+                TableCell(text=b.on.isoformat()),
+                TableCell(text=_inr(b.total)),
+                TableCell(text=b.source),
+            ]
+            for b in shown
+        ],
+        truncation_note=_truncation_note(total, len(shown)) or None,
+    )
 
-    return "\n".join(lines)
+    # The model sees only this one line -- enough to write an accurate lead,
+    # nothing it could leak or get wrong about the individual bills.
+    summary = (
+        f"Displayed a table of {total} bill(s) for {contact.name} ({window}), "
+        f"{_inr(grand)} total. Lead with one short sentence; do not re-list rows."
+    )
+    return summary, widget.model_dump()

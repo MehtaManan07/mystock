@@ -10,12 +10,13 @@ from langchain_core.tools import tool
 from app.modules.payments.service import PaymentsService
 
 from app.modules.assistant.tools._shared import MAX_ROWS, _inr, _period_start
+from app.modules.assistant.widgets import TableCell, TableColumn, TableWidget
 
 LABELS = {"get_expense_summary": "Adding up expenses"}
 
 
-@tool
-async def get_expense_summary(days: Optional[int] = 30) -> str:
+@tool(response_format="content_and_artifact")
+async def get_expense_summary(days: Optional[int] = 30) -> tuple[str, Optional[dict]]:
     """Summarise manually recorded spends and earnings, broken down by category.
 
     Covers standalone payments the owner logs directly (diesel, rent, misc
@@ -27,27 +28,49 @@ async def get_expense_summary(days: Optional[int] = 30) -> str:
 
     Use for "what did we spend on this month", "expense breakdown", or recorded
     earnings by category.
+
+    The category breakdown is shown to the user as a table; you receive only a
+    one-line summary with the headline totals, so lead with those in a sentence
+    and do not re-list the categories.
     """
     start = _period_start(days)
     summary = await PaymentsService.get_summary(from_date=start, to_date=None)
 
     window = f"last {days} days" if days else "all time"
-    lines = [
-        f"EXPENSE / INCOME SUMMARY ({window})",
-        f"- Total spends: {_inr(summary.total_spends)}",
-        f"- Total earnings: {_inr(summary.total_earnings)}",
-        f"- Entries: {summary.payment_count}",
-    ]
+    headline = (
+        f"Spends {_inr(summary.total_spends)} \u00b7 "
+        f"Earnings {_inr(summary.total_earnings)} \u00b7 "
+        f"{summary.payment_count} entries"
+    )
 
-    if summary.category_breakdown:
-        lines.append("")
-        lines.append("BY CATEGORY")
-        ordered = sorted(
-            summary.category_breakdown.items(),
-            key=lambda kv: Decimal(str(kv[1])),
-            reverse=True,
-        )
-        for category, amount in ordered[:MAX_ROWS]:
-            lines.append(f"- {category}: {_inr(amount)}")
+    # No category rows means there is no table to show -- fall back to a plain
+    # one-line answer rather than an empty widget.
+    if not summary.category_breakdown:
+        return f"Expenses / income ({window}): {headline}.", None
 
-    return "\n".join(lines)
+    ordered = sorted(
+        summary.category_breakdown.items(),
+        key=lambda kv: Decimal(str(kv[1])),
+        reverse=True,
+    )
+    shown = ordered[:MAX_ROWS]
+
+    widget = TableWidget(
+        title=f"Expenses / income ({window})",
+        summary=headline,
+        columns=[
+            TableColumn(label="Category"),
+            TableColumn(label="Amount", align="right"),
+        ],
+        rows=[
+            [TableCell(text=category), TableCell(text=_inr(amount))]
+            for category, amount in shown
+        ],
+        truncation_note=None,
+    )
+
+    content = (
+        f"Displayed the expense/income breakdown ({window}): {headline}. "
+        "Lead with those totals in one sentence; do not re-list the categories."
+    )
+    return content, widget.model_dump()

@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal
 from typing import Optional
 
 from langchain_core.tools import tool
@@ -23,6 +22,7 @@ from app.modules.transactions.service import TransactionsService
 
 from app.modules.assistant.tools._shared import MAX_ROWS, _inr, _period_start, _truncation_note
 from app.modules.assistant.tools.contacts import resolve_contact
+from app.modules.assistant.widgets import TableCell, TableColumn, TableWidget
 
 LABELS = {"get_contact_ledger": "Opening the ledger"}
 
@@ -30,11 +30,16 @@ LABELS = {"get_contact_ledger": "Opening the ledger"}
 @dataclass
 class _Entry:
     on: date
-    text: str
+    desc: str
+    href: Optional[str]
+    amount: str
+    detail: str
 
 
-@tool
-async def get_contact_ledger(customer: str, days: Optional[int] = None) -> str:
+@tool(response_format="content_and_artifact")
+async def get_contact_ledger(
+    customer: str, days: Optional[int] = None
+) -> tuple[str, Optional[dict]]:
     """One customer's ledger: recent bills and payments, with what they owe.
 
     Args:
@@ -45,10 +50,14 @@ async def get_contact_ledger(customer: str, days: Optional[int] = None) -> str:
     Use for "how do we stand with X", "show Dindayal's account", or "what has X
     bought and paid lately". Balance sign: positive means the customer owes the
     business; negative means the business owes them.
+
+    The bills and payments are shown to the user as a table; you receive only a
+    one-line summary leading with the balance, so state the balance in a
+    sentence and do not re-list the entries.
     """
     contact, problem = await resolve_contact(customer)
     if problem:
-        return problem
+        return problem, None
     assert contact is not None  # resolve_contact returns one when problem is None
 
     from_bound = _period_start(days)
@@ -84,10 +93,10 @@ async def get_contact_ledger(customer: str, days: Optional[int] = None) -> str:
         entries.append(
             _Entry(
                 on=t.transaction_date,
-                text=(
-                    f"{t.transaction_date.isoformat()} | bill {t.transaction_number} "
-                    f"| {t.type.value} | {_inr(t.total_amount)} | {t.payment_status.value}"
-                ),
+                desc=f"Bill {t.transaction_number}",
+                href=f"/transactions/{t.id}",
+                amount=_inr(t.total_amount),
+                detail=f"{t.type.value} \u00b7 {t.payment_status.value}",
             )
         )
     for p in payments:
@@ -96,10 +105,10 @@ async def get_contact_ledger(customer: str, days: Optional[int] = None) -> str:
         entries.append(
             _Entry(
                 on=p.payment_date,
-                text=(
-                    f"{p.payment_date.isoformat()} | payment {direction} "
-                    f"| {_inr(p.amount)} | via {method}"
-                ),
+                desc=f"Payment {direction}",
+                href=None,
+                amount=_inr(p.amount),
+                detail=f"via {method}",
             )
         )
 
@@ -112,20 +121,42 @@ async def get_contact_ledger(customer: str, days: Optional[int] = None) -> str:
         standing = "settled"
 
     window = f"last {days} days" if days else "all time"
-    header = f"LEDGER for {contact.name} ({window}) -- balance: {standing}"
 
     if not entries:
-        return header + "\nNo bills or payments in this period."
+        return (
+            f"Ledger for {contact.name} ({window}) -- balance: {standing}. "
+            "No bills or payments in this period.",
+            None,
+        )
 
     entries.sort(key=lambda e: e.on, reverse=True)
     total = len(entries)
     shown = entries[:MAX_ROWS]
 
-    lines = [header, ""]
-    lines.extend(f"- {e.text}" for e in shown)
+    widget = TableWidget(
+        title=f"Ledger for {contact.name} ({window})",
+        summary=f"Balance: {standing}",
+        columns=[
+            TableColumn(label="Date"),
+            TableColumn(label="Entry"),
+            TableColumn(label="Amount", align="right"),
+            TableColumn(label="Detail"),
+        ],
+        rows=[
+            [
+                TableCell(text=e.on.isoformat()),
+                TableCell(text=e.desc, href=e.href),
+                TableCell(text=e.amount),
+                TableCell(text=e.detail),
+            ]
+            for e in shown
+        ],
+        truncation_note=_truncation_note(total, len(shown)) or None,
+    )
 
-    note = _truncation_note(total, len(shown))
-    if note:
-        lines.append(note)
-
-    return "\n".join(lines)
+    content = (
+        f"Displayed {contact.name}'s ledger ({window}): {total} entries, "
+        f"balance {standing}. Lead with the balance in one sentence; do not "
+        "re-list the entries."
+    )
+    return content, widget.model_dump()

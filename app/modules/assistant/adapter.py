@@ -23,6 +23,12 @@ and whether it succeeded, nothing more; the actual data stays in graph state
 where the model reads it. That is the same ephemerality rule the contract
 enforces, applied at the point the two worlds meet.
 
+The one exception is a *widget*: authoritative display a tool built for the user
+and deliberately kept out of the model's context (it rides on the tool's
+``artifact``, not its model-facing ``content``). A widget is the opposite of a
+leaked result -- it is data the model must NOT see but the user must -- so it is
+forwarded as a ``widget`` event. See ``_widget_from_tool_end``.
+
 MESSAGE BOUNDARIES
 ------------------
 One model turn that produces text becomes one text bubble. A turn that only
@@ -40,6 +46,7 @@ from typing import Any, AsyncIterator, Optional
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.errors import GraphRecursionError
+from pydantic import ValidationError
 
 from app.modules.assistant.events import (
     AgentEvent,
@@ -49,6 +56,7 @@ from app.modules.assistant.events import (
     TextMessageStartEvent,
     ToolCallEndEvent,
     ToolCallStartEvent,
+    WidgetEvent,
 )
 from app.modules.assistant.tools import label_for
 
@@ -84,6 +92,28 @@ def _text_of(chunk: Any) -> str:
                 parts.append(block.get("text", ""))
         return "".join(parts)
     return ""
+
+
+def _widget_from_tool_end(event: dict) -> Optional[AgentEvent]:
+    """
+    A widget a tool chose to display, pulled off its ``artifact``.
+
+    This is the single, deliberate exception to "tool results never leave here".
+    A result is model-internal data; a *widget* is the opposite -- authoritative
+    display the backend built for the user and deliberately kept out of the
+    model's context. Tools surface one via ``response_format="content_and_artifact"``:
+    the ``content`` goes to the model, the ``artifact`` (a widget dict) comes
+    here. A malformed or absent artifact is simply not a widget, so it is ignored
+    rather than allowed to break the stream.
+    """
+    output = event.get("data", {}).get("output")
+    artifact = getattr(output, "artifact", None)
+    if not isinstance(artifact, dict) or "type" not in artifact:
+        return None
+    try:
+        return WidgetEvent(widget=artifact)
+    except ValidationError:
+        return None
 
 
 async def stream_graph_events(
@@ -161,6 +191,9 @@ async def stream_graph_events(
                 yield RunStatusEvent(status="thinking")
 
             elif kind == "on_tool_end":
+                widget_event = _widget_from_tool_end(event)
+                if widget_event is not None:
+                    yield widget_event
                 yield ToolCallEndEvent(tool_call_id=event["run_id"], ok=True)
 
     except GraphRecursionError:

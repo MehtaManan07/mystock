@@ -28,6 +28,7 @@ from app.modules.transactions.schemas import (
     CreatePaymentDto,
     TransactionFilterDto,
     TransactionItemCreate,
+    ProductBuyerSummary,
 )
 from app.modules.contacts.models import Contact, ContactType
 from app.modules.products.models import Product
@@ -726,6 +727,59 @@ class TransactionsService:
             transactions = result.scalars().all()
             return list(transactions)
         return await run_db(_list_transactions)
+
+    @staticmethod
+    async def product_buyers(
+        product_id: int, from_date: Optional[date] = None
+    ) -> List[ProductBuyerSummary]:
+        """
+        Who bought a given product, and how much of it, ranked by quantity.
+
+        Aggregates sale line items for one product by customer: total units,
+        total line value (pre-tax) and how many sale transactions were involved.
+        Purchases (stock bought in) are excluded -- this answers "which customer
+        buys the most of X", not supplier movement. The sum runs in the database
+        over every matching line, so no caller has to total rows itself.
+        """
+        def _product_buyers(db: Session) -> List[ProductBuyerSummary]:
+            qty = func.coalesce(func.sum(TransactionItem.quantity), 0)
+            value = func.coalesce(func.sum(TransactionItem.line_total), 0)
+            txns = func.count(func.distinct(Transaction.id))
+            query = (
+                select(
+                    Contact.id,
+                    Contact.name,
+                    qty.label("quantity"),
+                    value.label("amount"),
+                    txns.label("transaction_count"),
+                )
+                .select_from(TransactionItem)
+                .join(Transaction, TransactionItem.transaction_id == Transaction.id)
+                .join(Contact, Transaction.contact_id == Contact.id)
+                .where(TransactionItem.product_id == product_id)
+                .where(TransactionItem.deleted_at.is_(None))
+                .where(Transaction.type == TransactionType.sale)
+                .where(Transaction.deleted_at.is_(None))
+            )
+            if from_date:
+                query = query.where(Transaction.transaction_date >= from_date)
+
+            query = query.group_by(Contact.id, Contact.name).order_by(
+                desc("quantity"), desc("amount")
+            )
+
+            rows = db.execute(query).all()
+            return [
+                ProductBuyerSummary(
+                    contact_id=row.id,
+                    contact_name=row.name,
+                    quantity=int(row.quantity),
+                    amount=Decimal(str(row.amount)),
+                    transaction_count=int(row.transaction_count),
+                )
+                for row in rows
+            ]
+        return await run_db(_product_buyers)
 
     @staticmethod
     async def list_transactions_paginated(

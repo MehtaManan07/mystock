@@ -78,6 +78,16 @@ the low-risk, high-frequency writes — the daily bookkeeping chores.
 **v1 done = the agent handles everyday bookkeeping with a confirm tap.**
 This is where the durable HITL machinery (Phase 4) earns its keep.
 
+> **Clarify-before-stage (write HITL requirement).** A write must never be
+> staged from a half-specified request. Before building the preview, if a
+> required field is missing or ambiguous (amount, which contact, date, which
+> bill a payment settles), the agent asks **one short clarifying question**
+> first. So the write flow has three outcomes, not two: **needs-clarification**
+> (ask, don't stage) → **staged** (show "about to do X — ok?") →
+> **confirmed/rejected**. The read side already does the lightweight version of
+> this in the system prompt (`agent.py`) and via contact disambiguation; writes
+> make it a hard gate because a wrong-but-confirmed write mutates records.
+
 ### `find_bills` — the unified bills tool (spec)
 
 > **Why this is one tool, not two.** To a shop owner, "a bill" is one concept —

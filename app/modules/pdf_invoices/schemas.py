@@ -62,6 +62,20 @@ class PdfInvoiceMetadata(BaseModel):
     def canonical_money(cls, value: Decimal) -> Decimal:
         return value.quantize(Decimal("0.01")) if value else Decimal("0.00")
 
+    @property
+    def tax_tolerance(self) -> Decimal:
+        """Permitted gap between the per-line tax sum and the declared GST.
+
+        Invoices generated here compute tax from the lines, so they must agree to
+        the paisa. Uploaded bills were printed by external accounting software
+        that rounds each GST component to the nearest rupee before printing it,
+        which can shift the declared total by up to 50 paise per component.
+        """
+        if self.source != "uploaded":
+            return Decimal("0")
+        components = sum(1 for amount in (self.cgst, self.sgst, self.igst) if amount)
+        return Decimal("0.50") * components
+
     @model_validator(mode="after")
     def reconcile(self):
         if self.igst and (self.cgst or self.sgst):
@@ -74,8 +88,10 @@ class PdfInvoiceMetadata(BaseModel):
                 (line.quantity * line.unit_price * line.tax_rate / 100).quantize(Decimal("0.01"))
                 for line in self.line_items
             )
-            if taxable != self.subtotal or tax != self.cgst + self.sgst + self.igst:
-                raise ValueError("Line amounts and per-item taxes must match the invoice totals")
+            if taxable != self.subtotal:
+                raise ValueError("Line amounts must match the invoice taxable value")
+            if abs(tax - (self.cgst + self.sgst + self.igst)) > self.tax_tolerance:
+                raise ValueError("Per-item taxes must match the invoice GST")
         if self.source == "generated" and not self.line_items:
             raise ValueError("Generated invoices must include their line-item snapshots")
         return self

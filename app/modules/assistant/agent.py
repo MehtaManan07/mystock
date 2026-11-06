@@ -24,7 +24,9 @@ same transaction that closes the run.
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import AsyncIterator, List
+from zoneinfo import ZoneInfo
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
@@ -37,6 +39,29 @@ from app.modules.assistant.services import MessageService
 
 logger = logging.getLogger(__name__)
 
+# The business runs in India; bare dates the user types ("5th oct") are IST.
+_BUSINESS_TZ = ZoneInfo("Asia/Kolkata")
+
+
+def _today_line() -> str:
+    """
+    The one fact the model cannot look up: what day it is.
+
+    Without this the model resolves a bare "5th to 11th oct" by guessing a year
+    -- and a weak model guesses its training-era year, not this one, so the tool
+    queries an empty window and truthfully reports "nothing found". Anchoring the
+    prompt to today makes year-less dates resolve to the current year, which is
+    almost always what the user means.
+    """
+    today = datetime.now(_BUSINESS_TZ).date()
+    return (
+        f"Today's date is {today:%A, %-d %B %Y} (India). When the user gives a "
+        "date or period without a year, assume the current year and the most "
+        "recent matching period in the past, unless they clearly mean the "
+        "future. Resolve relative periods (this week, last month, yesterday) "
+        "against today. Never query a year the user did not state."
+    )
+
 SYSTEM_PROMPT = (
     "You are the assistant for a wholesale paper and packaging business. "
     "You answer questions about stock, sales, purchases, contacts and expenses "
@@ -44,12 +69,25 @@ SYSTEM_PROMPT = (
     "ground every factual answer rather than guessing, and never invent numbers. "
     "Be direct and use Indian number formatting (Rs 1,20,000). If the tools do "
     "not give you what is needed to answer, say so plainly. "
+    "When a tool's output already contains markdown links -- for example "
+    "[SALE-0073](/pdf-invoices?preview=40) -- reproduce every link exactly as "
+    "given: keep the whole [label](url) intact. Never turn a linked bill number "
+    "into plain or bold text, and never drop the URL. When a tool returns a list "
+    "of rows such as bills, present those rows as the tool gave them rather than "
+    "restyling them; you may add one short sentence before the list, but keep "
+    "each bill number as the tool's link. "
     "Only do what your available tools let you do, and never offer or imply an "
     "action you have no tool for. Your current tools are read-only -- they look "
     "things up but cannot send messages, reminders or emails, or change records "
     "-- so do not offer to do those; if asked, say that is not something you can "
     "do yet. "
-    "Be decisive: gather what you need with as few tool calls as possible, then "
+    "If a request is too vague to choose a tool, or is missing a detail a tool "
+    "needs (whose records, which product, what period, how much), ask one short "
+    "clarifying question instead of guessing or inventing a value. If the "
+    "request clearly implies a sensible default, use it and state the "
+    "assumption briefly. "
+    "Be decisive: once you know what is being asked, gather what you need with "
+    "as few tool calls as possible, then "
     "answer. Do not call the same tool again with slightly different parameters "
     "hoping for a different result -- if a query has already returned the data, "
     "use it. If a tool returns nothing useful, say so instead of retrying "
@@ -95,7 +133,8 @@ def build_context(messages: List) -> List[BaseMessage]:
             context.append(AIMessage(content=message.content))
 
     context.reverse()
-    return [SystemMessage(content=SYSTEM_PROMPT)] + context
+    system = SYSTEM_PROMPT + "\n\n" + _today_line()
+    return [SystemMessage(content=system)] + context
 
 
 async def run_agent(thread_id: int, user_id: int) -> AsyncIterator[AgentEvent]:
